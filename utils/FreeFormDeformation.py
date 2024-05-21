@@ -71,7 +71,11 @@ def load_png(name):
     from PIL import Image
 
     sys.path.append("/res")
-    image = Image.open(name)
+
+    current_dir = os.path.dirname(__file__)
+    image_path = os.path.join(current_dir, '../images/',name)
+
+    image = Image.open(image_path)
 
     # Convert PIL image to numpy array and transpose it
     image_array = np.array(image).astype(np.float32)
