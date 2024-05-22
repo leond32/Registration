@@ -39,7 +39,7 @@ class DeformationLayer(nn.Module):
             noise_2d_i = noise_2d_i[: shape[-2], : shape[-1]]
             noise_2d.append(noise_2d_i)
 
-        print(noise_2d)
+        #print(noise_2d)
 
         #print([noise_2d for _ in range(shape[-3])])
         self._parm = torch.stack(noise_2d, 0).unsqueeze(0).to(device)
