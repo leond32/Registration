@@ -64,6 +64,7 @@ class DeformationLayer(nn.Module):
             self.field.update()
             # Access the displacement field buffer 'u'
             displacement_field = self.field.u  # Assuming it has shape [2, Height, Width]
+            return displacement_field
 
 def load_png(name):
     import torch
