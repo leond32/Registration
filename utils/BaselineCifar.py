@@ -3,12 +3,13 @@ import torch
 from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms
-from FreeformTry import DeformationLayer
+from FreeFormDeformation import DeformationLayer
 from deepali.core import functional as U
 from tqdm import tqdm
 import random
 from diffusion_unet import Unet
 from torch import nn, optim
+import os
 
 
 
@@ -69,16 +70,13 @@ class CustomDataset(Dataset):
 
         return stacked_image, deformation_field
     
-    
-    
-def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs):
+def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device):
     # Training loop
     for epoch in range(n_epochs):
         model.train()
         train_loss = 0
-        # Initialize tqdm progress bar for the training batches
-        train_bar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Training Epoch {epoch+1}/{n_epochs}')
-        for i, (images, deformation_field) in train_bar:
+        # Loop through training batches
+        for i, (images, deformation_field) in enumerate(train_loader):
             # Move data to the device
             images = images.float().to(device)
             deformation_field = deformation_field.to(device)
@@ -99,19 +97,15 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs)
             # Update the weights
             optimizer.step()
 
-            # Update the progress bar with the latest loss information
-            train_bar.set_postfix(loss=loss.item())
-        
         # Compute the average training loss
         avg_train_loss = train_loss / len(train_loader)
         
         # Validate
         model.eval()
         val_loss = 0
-        # Initialize tqdm progress bar for the validation batches
-        val_bar = tqdm(enumerate(val_loader), total=len(val_loader), desc='Validation')
+        # Loop through validation batches
         with torch.no_grad():
-            for i, (images, deformation_field) in val_bar:
+            for i, (images, deformation_field) in enumerate(val_loader):
                 # Move validation data to the device
                 images = images.float().to(device)
                 deformation_field = deformation_field.to(device)
@@ -119,14 +113,13 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs)
                 outputs = model(images)
                 batch_loss = criterion(outputs, deformation_field).item()
                 val_loss += batch_loss
-                
-                # Update the progress bar for validation
-                val_bar.set_postfix(val_loss=batch_loss)
             
             # Compute the average validation loss
             avg_val_loss = val_loss / len(val_loader)
-            print(f'Validation Loss: {avg_val_loss}')
             
+            # Print training and validation losses to console
+            print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
+            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')            
             
 def main():
     
@@ -180,13 +173,14 @@ def main():
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.004, weight_decay=1e-5)
 
-    n_epochs = 50
-    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs)
+    n_epochs = 10
+    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device)
 
-    torch.save(model.state_dict(), 'model_weights.pth')
+    torch.save(model.state_dict(), '/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_10_epochs.pth')
 
 if __name__ == "__main__":
     main()
+
             
     
     
