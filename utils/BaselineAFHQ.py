@@ -55,8 +55,8 @@ class CustomDataset(Dataset):
             raise FileNotFoundError(f"Image not found at path: {image_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         shape = img.shape
-        img = img.unsqueeze(0)
-        original_image = torch.tensor(img).float().to(self.device)
+        original_image = torch.tensor(img).float().unsqueeze(0)  # Add batch dimension
+        original_image= original_image.to(self.device)
         
 
         # Build a new deformation layer for the current image
