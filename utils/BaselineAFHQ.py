@@ -36,7 +36,7 @@ class CustomDataset(Dataset):
         self.device = device
     
     def __len__(self):
-        return len(self.images)
+        return len(self.image_paths)
     
     def build_deformation_layer(self, shape, device):
         """
