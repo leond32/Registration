@@ -22,39 +22,45 @@ def get_mean_std(images):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, images, shape,transform=None, device = "cpu"):
+    def __init__(self, image_paths, transform=None, device = "cpu"):
         """
         Args:
-            images (torch.Tensor): The tensor containing image data.
+            image_paths (list): List of all image Paths.
             shape: The shape of one image in the dataset.
             mean (float): The mean value for normalization.
             std (float): The standard deviation for normalization.
             transform (bool): Whether to apply the transformation.
         """
-        self.images = images
-        self.shape = shape
+        self.image_paths = image_paths
         self.transform = transform
         self.device = device
     
     def __len__(self):
         return len(self.images)
     
-    def build_deformation_layer(self, device):
+    def build_deformation_layer(self, shape, device):
         """
         Build and return a new deformation layer for each call to __getitem__.
         This method returns the created deformation layer.
         """
-        deformation_layer = DeformationLayer(self.shape)
+        deformation_layer = DeformationLayer(shape)
         deformation_layer.new_deformation(device=device)
         return deformation_layer
 
     def __getitem__(self, idx):
         # Fetch the original image
-        original_image = self.images[idx].unsqueeze(0)  # Add batch dimension
-        original_image = original_image.to(self.device)
+        image_path = self.image_paths[idx]
+        img = cv2.imread(image_path)
+        if img is None:
+            raise FileNotFoundError(f"Image not found at path: {image_path}")
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        shape = img.shape
+        img = img.unsqueeze(0)
+        original_image = torch.tensor(img).float().to(self.device)
+        
 
         # Build a new deformation layer for the current image
-        deformation_layer = self.build_deformation_layer(self.device).to(self.device)
+        deformation_layer = self.build_deformation_layer(shape, self.device).to(self.device)
 
         # Apply deformation to get the deformed image
         deformed_image = deformation_layer.deform(original_image)
@@ -122,34 +128,32 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
             print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
             print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')  
 
-def load_images(folder_path):
-    images = []
-    for filename in os.listdir(folder_path):
-        img = cv2.imread(os.path.join(folder_path, filename))
-        if img is not None:
-            images.append(img)
-    return images         
+def get_image_paths(root_dir): 
+    
+    image_paths = []
+    for category in os.listdir(root_dir):
+        category_dir = os.path.join(root_dir, category)
+        if os.path.isdir(category_dir):
+            for filename in os.listdir(category_dir):
+                if filename.endswith(".jpg") or filename.endswith(".png"):
+                    image_paths.append(os.path.join(category_dir, filename))   
+    return image_paths
             
 def main():
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    data_path = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/AnimalFaces/afhq'
-    train_images = load_images(os.path.join(data_path, 'train/cat')) + load_images(os.path.join(data_path, 'train/dog')) + load_images(os.path.join(data_path, 'train/wild'))
-    val_images = load_images(os.path.join(data_path, 'val/cat')) + load_images(os.path.join(data_path, 'val/dog')) + load_images(os.path.join(data_path, 'val/wild'))
+    train_data_path = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/Animal_Faces/afhq/train'
+    val_data_path = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/Animal_Faces/afhq/val'
 
-    train_images = np.mean(train_images, axis=3)
-    train_images = torch.from_numpy(train_images)
+    train_images_paths = get_image_paths(train_data_path)
+    val_images_paths = get_image_paths(val_data_path)
     
-    val_images = np.mean(val_images, axis=3)
-    val_images = torch.from_numpy(val_images)
-
-
-    mean, std = get_mean_std(train_images + val_images)
-
-    shape = train_images[0].shape[-2:]
-    train_dataset = CustomDataset(train_images, shape, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
-    val_dataset = CustomDataset(val_images, shape, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
+    mean = 0.5
+    std = 0.5
+    
+    train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
+    val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
