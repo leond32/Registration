@@ -55,7 +55,7 @@ class CustomDataset(Dataset):
             raise FileNotFoundError(f"Image not found at path: {image_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         shape = img.shape
-        original_image = torch.tensor(img).float().unsqueeze(0)  # Add batch dimension
+        original_image = img.unsqueeze(0)  # Add batch dimension
         original_image= original_image.to(self.device)
         
 
@@ -152,8 +152,8 @@ def main():
     mean = 0.5
     std = 0.5
     
-    train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
-    val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
+    train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.resize([256, 256]), transforms.ToTensor(), transforms.Normalize(mean=[mean], std=[std])]), device=device)
+    val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.resize([256, 256]), transforms.ToTensor(),transforms.Normalize(mean=[mean], std=[std])]), device=device)
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
