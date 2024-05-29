@@ -54,6 +54,7 @@ class CustomDataset(Dataset):
         if img is None:
             raise FileNotFoundError(f"Image not found at path: {image_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = torch.tensor(img).float()
         shape = img.shape
         original_image = img.unsqueeze(0)  # Add batch dimension
         original_image= original_image.to(self.device)
@@ -152,11 +153,11 @@ def main():
     mean = 0.5
     std = 0.5
     
-    train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.resize([256, 256]), transforms.ToTensor(), transforms.Normalize(mean=[mean], std=[std])]), device=device)
-    val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.resize([256, 256]), transforms.ToTensor(),transforms.Normalize(mean=[mean], std=[std])]), device=device)
+    train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
+    val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=True)
 
     model = Unet(
         dim=8,
@@ -179,7 +180,7 @@ def main():
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.004, weight_decay=1e-5)
 
-    n_epochs = 10
+    n_epochs = 5
     train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device)
     
     # save (update the number of epochs in name)
@@ -188,6 +189,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+            
+    
+    
 
             
     
