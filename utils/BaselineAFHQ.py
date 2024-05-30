@@ -11,6 +11,7 @@ from diffusion_unet import Unet
 from torch import nn, optim
 import os
 import cv2
+from torch.cuda.amp import GradScaler, autocast
 
 
 
@@ -78,56 +79,51 @@ class CustomDataset(Dataset):
 
         return stacked_image, deformation_field
     
+
+
 def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device):
-    # Training loop
+    scaler = GradScaler()  # Initialize the GradScaler for mixed precision training
+    
     for epoch in range(n_epochs):
         model.train()
         train_loss = 0
-        # Loop through training batches
+        
         for i, (images, deformation_field) in enumerate(train_loader):
-            # Move data to the device
             images = images.float().to(device)
             deformation_field = deformation_field.to(device)
             
-            # Zero the gradients
             optimizer.zero_grad()
 
-            # Forward pass
-            outputs = model(images)
+            # Use autocast for mixed precision
+            with autocast():
+                outputs = model(images)
+                loss = criterion(outputs, deformation_field)
+                train_loss += loss.item()
 
-            # Compute the loss
-            loss = criterion(outputs, deformation_field)
-            train_loss += loss.item()
+            # Backward pass with scaled loss
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
-            # Backward pass
-            loss.backward()
-
-            # Update the weights
-            optimizer.step()
-
-        # Compute the average training loss
         avg_train_loss = train_loss / len(train_loader)
         
-        # Validate
         model.eval()
         val_loss = 0
-        # Loop through validation batches
         with torch.no_grad():
             for i, (images, deformation_field) in enumerate(val_loader):
-                # Move validation data to the device
                 images = images.float().to(device)
                 deformation_field = deformation_field.to(device)
                 
-                outputs = model(images)
-                batch_loss = criterion(outputs, deformation_field).item()
-                val_loss += batch_loss
+                # Use autocast for mixed precision
+                with autocast():
+                    outputs = model(images)
+                    batch_loss = criterion(outputs, deformation_field).item()
+                    val_loss += batch_loss
             
-            # Compute the average validation loss
             avg_val_loss = val_loss / len(val_loader)
             
-            # Print training and validation losses to console
             print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
-            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')  
+            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')   
 
 def get_image_paths(root_dir): 
     
