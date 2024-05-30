@@ -12,6 +12,7 @@ from torch import nn, optim
 import os
 import cv2
 from torch.cuda.amp import GradScaler, autocast
+from PIL import Image
 
 
 
@@ -55,6 +56,7 @@ class CustomDataset(Dataset):
         if img is None:
             raise FileNotFoundError(f"Image not found at path: {image_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = Image.fromarray(img)
         transform = transforms.Resize((256,256))
         img = transform(img)
         img = torch.tensor(img).float()
