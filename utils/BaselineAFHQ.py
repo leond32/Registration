@@ -13,7 +13,7 @@ import os
 import cv2
 from torch.cuda.amp import GradScaler, autocast
 from PIL import Image
-
+import torchvision.transforms.functional as F
 
 
 def get_mean_std(images):
@@ -59,7 +59,7 @@ class CustomDataset(Dataset):
         img = Image.fromarray(img)
         transform = transforms.Resize((256,256))
         img = transform(img)
-        img = torch.tensor(img).float()
+        img = F.pil_to_tensor(img).float()
         shape = img.shape
         original_image = img.unsqueeze(0)  # Add batch dimension
         original_image= original_image.to(self.device)
