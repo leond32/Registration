@@ -14,6 +14,7 @@ import cv2
 from torch.cuda.amp import GradScaler, autocast
 from PIL import Image
 import torchvision.transforms.functional as F
+import sys
 
 
 def get_mean_std(images):
@@ -60,9 +61,9 @@ class CustomDataset(Dataset):
         transform = transforms.Resize((256,256))
         img = transform(img)
         img = F.pil_to_tensor(img).float()
-        shape = img.shape
-        original_image = img.unsqueeze(0)  # Add batch dimension
-        original_image= original_image.to(self.device)
+        shape = img.squeeze(0).shape
+        #original_image = img.unsqueeze(0)  # Add batch dimension
+        original_image= img.to(self.device)
         
 
         # Build a new deformation layer for the current image
@@ -124,10 +125,15 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
                     batch_loss = criterion(outputs, deformation_field).item()
                     val_loss += batch_loss
             
+            if (i + 1) % 10 == 0:
+                print(f'Epoch [{epoch+1}/{n_epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}')
+                sys.stdout.flush()
+            
             avg_val_loss = val_loss / len(val_loader)
             
             print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
-            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')   
+            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')
+            sys.stdout.flush()   
 
 def get_image_paths(root_dir): 
     
