@@ -55,6 +55,8 @@ class CustomDataset(Dataset):
         if img is None:
             raise FileNotFoundError(f"Image not found at path: {image_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        transform = transforms.Resize((256,256))
+        img = transform(img)
         img = torch.tensor(img).float()
         shape = img.shape
         original_image = img.unsqueeze(0)  # Add batch dimension
@@ -151,7 +153,6 @@ def main():
     
     train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
     val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
-
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=16, shuffle=True)
 
@@ -174,7 +175,7 @@ def main():
         model.load_state_dict(torch.load('/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_afhq.pth', map_location=device))
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.004, weight_decay=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
     n_epochs = 5
     train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device)
