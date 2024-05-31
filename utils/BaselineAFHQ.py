@@ -165,8 +165,8 @@ def main():
     train_images_paths = get_image_paths(train_data_path)
     val_images_paths = get_image_paths(val_data_path)
     
-    mean = 0.5
-    std = 0.5
+    mean = 113
+    std = 61
     
     train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
     val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[mean], std=[std])]), device=device)
@@ -195,7 +195,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
     n_epochs = 5
-    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device)
+    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, scaler=None)
     
     # save (update the number of epochs in name)
    
