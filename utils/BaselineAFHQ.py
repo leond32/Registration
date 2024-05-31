@@ -86,8 +86,10 @@ class CustomDataset(Dataset):
     
 
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device):
-    scaler = GradScaler()  # Initialize the GradScaler for mixed precision training
+def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, scaler=None):
+    
+    
+    scaler = scaler  # Initialize the GradScaler for mixed precision training
     
     for epoch in range(n_epochs):
         model.train()
@@ -100,15 +102,22 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
             optimizer.zero_grad()
 
             # Use autocast for mixed precision
-            with autocast():
+            if scaler is not None:
+                with autocast():
+                    outputs = model(images)
+                    loss = criterion(outputs, deformation_field)
+                    train_loss += loss.item()
+                # Backward pass with scaled loss
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
                 outputs = model(images)
                 loss = criterion(outputs, deformation_field)
                 train_loss += loss.item()
-
-            # Backward pass with scaled loss
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+                loss.backward()
+                optimizer.step()
+                
 
         avg_train_loss = train_loss / len(train_loader)
         
@@ -119,16 +128,16 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
                 images = images.float().to(device)
                 deformation_field = deformation_field.to(device)
                 
-                # Use autocast for mixed precision
-                with autocast():
+                if scaler is not None:
+                    with autocast():
+                        outputs = model(images)
+                        batch_loss = criterion(outputs, deformation_field).item()
+                        val_loss += batch_loss
+                else:
                     outputs = model(images)
                     batch_loss = criterion(outputs, deformation_field).item()
                     val_loss += batch_loss
-            
-            if (i + 1) % 10 == 0:
-                print(f'Epoch [{epoch+1}/{n_epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}')
-                sys.stdout.flush()
-            
+                    
             avg_val_loss = val_loss / len(val_loader)
             
             print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
