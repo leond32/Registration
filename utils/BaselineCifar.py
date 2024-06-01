@@ -10,6 +10,7 @@ import random
 from diffusion_unet import Unet
 from torch import nn, optim
 import os
+import sys
 
 
 
@@ -70,11 +71,29 @@ class CustomDataset(Dataset):
 
         return stacked_image, deformation_field
     
-def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device):
+def early_stopping(val_losses, patience=5):
+    if len(val_losses) < patience:
+        return False
+    for i in range(1, patience+1):
+        if val_losses[-i] < val_losses[-i-1]:
+            return False
+    return True
+
+def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='cifar10_logs'):
+    # Create a directory to store logs
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Open a file to write the logs
+    csv_path = os.path.join(log_dir, 'losses.csv')
+    with open(csv_path, 'w') as f:
+        f.write('epoch,train_loss,val_loss\n')
+    
     # Training loop
     for epoch in range(n_epochs):
         model.train()
         train_loss = 0
+        val_losses = []
         # Loop through training batches
         for i, (images, deformation_field) in enumerate(train_loader):
             # Move data to the device
@@ -116,10 +135,20 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
             
             # Compute the average validation loss
             avg_val_loss = val_loss / len(val_loader)
+            val_losses.append(avg_val_loss)
             
             # Print training and validation losses to console
             print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
-            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')            
+            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')  
+            sys.stdout.flush()   
+            
+            # Log losses to CSV file
+            with open(csv_path, 'a') as f:
+                f.write(f'{epoch+1},{avg_train_loss},{avg_val_loss}\n')  
+            
+            if early_stopping(val_losses=val_losses, patience=5):
+                print('Early stopping...')
+                break        
             
 def main():
     
@@ -174,7 +203,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.004, weight_decay=1e-5)
 
     n_epochs = 10
-    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device)
+    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='cifar10_logs')
 
     torch.save(model.state_dict(), '/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_10_epochs.pth')
 
