@@ -79,76 +79,76 @@ def early_stopping(val_losses, patience=5):
             return False
     return True
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='cifar10_logs'):
-    # Create a directory to store logs
+def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='cifar10_logs', patience=5):
+    # Create directories if they don't exist
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
-    # Open a file to write the logs
-    csv_path = os.path.join(log_dir, 'losses.csv')
+    # Initialize lists to hold the loss values
+    train_losses = []
+    val_losses = []
+
+    # Open CSV file for logging
+    csv_path = os.path.join(log_dir, 'losses_64_02.csv')
     with open(csv_path, 'w') as f:
         f.write('epoch,train_loss,val_loss\n')
-    
-    # Training loop
+
+    best_val_loss = float('inf')
+    best_epoch = 0
+
     for epoch in range(n_epochs):
         model.train()
         train_loss = 0
-        val_losses = []
-        # Loop through training batches
+        
         for i, (images, deformation_field) in enumerate(train_loader):
-            # Move data to the device
             images = images.float().to(device)
             deformation_field = deformation_field.to(device)
             
-            # Zero the gradients
             optimizer.zero_grad()
-
-            # Forward pass
             outputs = model(images)
-
-            # Compute the loss
             loss = criterion(outputs, deformation_field)
             train_loss += loss.item()
-
-            # Backward pass
             loss.backward()
-
-            # Update the weights
             optimizer.step()
-
-        # Compute the average training loss
+                
         avg_train_loss = train_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
         
-        # Validate
         model.eval()
         val_loss = 0
-        # Loop through validation batches
         with torch.no_grad():
             for i, (images, deformation_field) in enumerate(val_loader):
-                # Move validation data to the device
                 images = images.float().to(device)
                 deformation_field = deformation_field.to(device)
                 
                 outputs = model(images)
                 batch_loss = criterion(outputs, deformation_field).item()
                 val_loss += batch_loss
-            
-            # Compute the average validation loss
-            avg_val_loss = val_loss / len(val_loader)
-            val_losses.append(avg_val_loss)
-            
-            # Print training and validation losses to console
-            print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
-            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')  
-            sys.stdout.flush()   
-            
-            # Log losses to CSV file
-            with open(csv_path, 'a') as f:
-                f.write(f'{epoch+1},{avg_train_loss},{avg_val_loss}\n')  
-            
-            if early_stopping(val_losses=val_losses, patience=5):
-                print('Early stopping...')
-                break        
+                
+        avg_val_loss = val_loss / len(val_loader)
+        val_losses.append(avg_val_loss)
+
+        # Print training and validation losses to console
+        print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.8f}')
+        print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.8f}')  
+        sys.stdout.flush()   
+                
+        # Log the losses to a CSV file
+        with open(csv_path, 'a') as f:
+            f.write(f'{epoch+1},{avg_train_loss},{avg_val_loss}\n')
+        
+        # Save model if validation loss has improved
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            best_epoch = epoch + 1
+            torch.save(model.state_dict(), os.path.join(log_dir, 'best_model_64_02.pth'))
+            print(f'Model saved at epoch {epoch+1} with validation loss {avg_val_loss:.8f}')
+        
+
+        # Check for early stopping
+        if early_stopping(val_losses, patience):
+            print('Early stopping...')
+            break          
             
 def main():
     
@@ -164,7 +164,7 @@ def main():
     random_fraction = 1
     random_indices = random.sample(range(len(images)), int(random_fraction * len(images)))
     images = images[random_indices]
-    transform = transforms.Resize((32, 32))
+    transform = transforms.Resize((64, 64))
     images = transform(images)
 
     mean, std = get_mean_std(images)
@@ -196,20 +196,16 @@ def main():
 
     model.to(device)
     # Check if weights file exists
-    if os.path.isfile('model_weights.pth'):
-        model.load_state_dict(torch.load('model_weights.pth', map_location=device))
+    if os.path.isfile('/vol/aimspace/projects/practical_SoSe24/registration_group/scripts/launchers/cifar10_logs/best_model_64.pth'):
+        model.load_state_dict(torch.load('/vol/aimspace/projects/practical_SoSe24/registration_group/scripts/launchers/cifar10_logs/best_model_64.pth', map_location=device))
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.004, weight_decay=1e-5)
 
-    n_epochs = 10
+    n_epochs = 20
     train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='cifar10_logs')
 
-    torch.save(model.state_dict(), '/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_10_epochs.pth')
+    torch.save(model.state_dict(), '/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_20_epochs_64_02.pth')
 
 if __name__ == "__main__":
     main()
-
-            
-    
-    

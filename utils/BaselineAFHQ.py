@@ -15,6 +15,7 @@ from torch.cuda.amp import GradScaler, autocast
 from PIL import Image
 import torchvision.transforms.functional as F
 import sys
+from torch.utils.tensorboard import SummaryWriter
 
 
 def get_mean_std(images):
@@ -58,7 +59,7 @@ class CustomDataset(Dataset):
             raise FileNotFoundError(f"Image not found at path: {image_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = Image.fromarray(img)
-        transform = transforms.Resize((256,256))
+        transform = transforms.Resize((128,128))
         img = transform(img)
         img = F.pil_to_tensor(img).float()
         shape = img.squeeze(0).shape
@@ -86,11 +87,31 @@ class CustomDataset(Dataset):
     
 
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, scaler=None):
+def early_stopping(val_losses, patience=5):
+    if len(val_losses) < patience:
+        return False
+    for i in range(1, patience+1):
+        if val_losses[-i] < val_losses[-i-1]:
+            return False
+    return True
+
+def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='afhq_logs', patience=5):
+    # Create directories if they don't exist
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
     
-    
-    scaler = scaler  # Initialize the GradScaler for mixed precision training
-    
+    # Initialize lists to hold the loss values
+    train_losses = []
+    val_losses = []
+
+    # Open CSV file for logging
+    csv_path = os.path.join(log_dir, 'losses_128.csv')
+    with open(csv_path, 'w') as f:
+        f.write('epoch,train_loss,val_loss\n')
+
+    best_val_loss = float('inf')
+    best_epoch = 0
+
     for epoch in range(n_epochs):
         model.train()
         train_loss = 0
@@ -100,26 +121,14 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
             deformation_field = deformation_field.to(device)
             
             optimizer.zero_grad()
-
-            # Use autocast for mixed precision
-            if scaler is not None:
-                with autocast():
-                    outputs = model(images)
-                    loss = criterion(outputs, deformation_field)
-                    train_loss += loss.item()
-                # Backward pass with scaled loss
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                outputs = model(images)
-                loss = criterion(outputs, deformation_field)
-                train_loss += loss.item()
-                loss.backward()
-                optimizer.step()
+            outputs = model(images)
+            loss = criterion(outputs, deformation_field)
+            train_loss += loss.item()
+            loss.backward()
+            optimizer.step()
                 
-
         avg_train_loss = train_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
         
         model.eval()
         val_loss = 0
@@ -128,22 +137,35 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
                 images = images.float().to(device)
                 deformation_field = deformation_field.to(device)
                 
-                if scaler is not None:
-                    with autocast():
-                        outputs = model(images)
-                        batch_loss = criterion(outputs, deformation_field).item()
-                        val_loss += batch_loss
-                else:
-                    outputs = model(images)
-                    batch_loss = criterion(outputs, deformation_field).item()
-                    val_loss += batch_loss
-                    
-            avg_val_loss = val_loss / len(val_loader)
-            
-            print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.4f}')
-            print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.4f}')
-            sys.stdout.flush()   
+                outputs = model(images)
+                batch_loss = criterion(outputs, deformation_field).item()
+                val_loss += batch_loss
+                
+        avg_val_loss = val_loss / len(val_loader)
+        val_losses.append(avg_val_loss)
 
+        # Print training and validation losses to console
+        print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.8f}')
+        print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.8f}')  
+        sys.stdout.flush()   
+                
+        # Log the losses to a CSV file
+        with open(csv_path, 'a') as f:
+            f.write(f'{epoch+1},{avg_train_loss},{avg_val_loss}\n')
+        
+        # Save model if validation loss has improved
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            best_epoch = epoch + 1
+            torch.save(model.state_dict(), os.path.join(log_dir, 'best_model_128.pth'))
+            print(f'Model saved at epoch {epoch+1} with validation loss {avg_val_loss:.8f}')
+        
+
+        # Check for early stopping
+        if early_stopping(val_losses, patience):
+            print('Early stopping...')
+            break          
+    
 def get_image_paths(root_dir): 
     
     image_paths = []
@@ -177,7 +199,7 @@ def main():
         dim=8,
         init_dim=None,
         out_dim=2,
-        dim_mults=(1, 2, 4, 8),
+        dim_mults=(1, 2, 4, 8, 16),
         channels=2,
         resnet_block_groups=8,
         learned_variance=False,
@@ -188,18 +210,18 @@ def main():
 
     model.to(device)
     # Check if weights file exists
-    if os.path.isfile('/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_afhq.pth'):
-        model.load_state_dict(torch.load('/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_afhq.pth', map_location=device))
+    if os.path.isfile('/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_afhq_128.pth'):
+        model.load_state_dict(torch.load('/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_afhq_128.pth', map_location=device))
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=0.003, weight_decay=1e-5)
 
-    n_epochs = 5
-    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, scaler=None)
+    n_epochs = 30
+    train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='afhq_logs', patience = 5)
     
     # save (update the number of epochs in name)
    
-    torch.save(model.state_dict(), '/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_afhq.pth')
+    torch.save(model.state_dict(), '/vol/aimspace/projects/practical_SoSe24/registration_group/model_weights/model_weights_afhq_128.pth')
 
 if __name__ == "__main__":
     main()
