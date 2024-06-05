@@ -33,9 +33,9 @@ class DeformationLayer(nn.Module):
         noise_2d = []
 
         for i in range(shape[-3]):
-            noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05
-            noise_2d_i += rand_perlin_2d(s, (8, 8)) * 0.03
-            noise_2d_i += rand_perlin_2d(s, (2, 2)) * 0.3
+            noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05 # 0.05
+            noise_2d_i += rand_perlin_2d(s, (8, 8)) * 0.03 # 0.03
+            noise_2d_i += rand_perlin_2d(s, (2, 2)) * 0.2 # 0.2
             noise_2d_i = noise_2d_i[: shape[-2], : shape[-1]]
             noise_2d.append(noise_2d_i)
 
