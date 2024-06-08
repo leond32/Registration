@@ -17,11 +17,11 @@ class DeformationLayer(nn.Module):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.shape = shape
-        grid = Grid(size=shape)
-        self.field = StationaryVelocityFreeFormDeformation(grid, stride=stride, params=self.params).to(self.device)   # type: ignore
-        self.field.requires_grad_(False)
-        self.transformer = ImageTransformer(self.field)
-        self.transformer_inv = ImageTransformer(self.field.inverse(link=True))
+        grid = Grid(size=shape) #The region for the image 
+        self.field = StationaryVelocityFreeFormDeformation(grid, stride=stride, params=self.params).to(self.device)   # type: ignore 
+        self.field.requires_grad_(False) #no update 
+        self.transformer = ImageTransformer(self.field) #transform
+        self.transformer_inv = ImageTransformer(self.field.inverse(link=True)) #inverse transform
 
     def params(self, *args, **kargs):
         # print(args, kargs)
@@ -29,7 +29,7 @@ class DeformationLayer(nn.Module):
 
     def new_deformation(self, device):
         shape = self.field.data_shape
-        s = (next8(shape[-2]), next8(shape[-1]))
+        s = (next8(shape[-2]), next8(shape[-1])) 
 
         noise_2d = []
 
@@ -43,7 +43,7 @@ class DeformationLayer(nn.Module):
         #print(noise_2d)
 
         #print([noise_2d for _ in range(shape[-3])])
-        self._parm = torch.stack(noise_2d, 0).unsqueeze(0).to(self.device)
+        self._parm = torch.stack(noise_2d, 0).unsqueeze(0).to(self.device) #4D noise
         #self._parm = torch.stack([noise_2d for _ in range(shape[-3])], 0).unsqueeze(0).to(device)
         self.field.condition_()
 
@@ -51,7 +51,7 @@ class DeformationLayer(nn.Module):
         i = i.to(self.device)
         if len(i) == 3:
             i = i.unsqueeze(0).to(self.device)
-        return self.transformer.forward(i)
+        return self.transformer.forward(i) #3D to 4D to do the forawrd transform
 
     def back_deform(self, i: torch.Tensor):
         i = i.to(self.device)
