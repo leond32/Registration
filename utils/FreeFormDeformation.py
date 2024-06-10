@@ -2,8 +2,8 @@ import deepali.core.functional
 import torch
 from deepali.spatial import Grid, ImageTransformer, StationaryVelocityFreeFormDeformation
 from torch import nn
-
 from perlin import rand_perlin_2d
+import numpy as np
 
 
 def next8(number: int):
@@ -13,7 +13,7 @@ def next8(number: int):
 
 
 class DeformationLayer(nn.Module):
-    def __init__(self, shape, stride=10) -> None:
+    def __init__(self, shape, random_df_creation_setting = 0, stride=10) -> None:
         super().__init__()
         self.shape = shape
         grid = Grid(size=shape)
@@ -21,6 +21,7 @@ class DeformationLayer(nn.Module):
         self.field.requires_grad_(False)
         self.transformer = ImageTransformer(self.field)
         self.transformer_inv = ImageTransformer(self.field.inverse(link=True))
+        self.random_df_creation_setting = random_df_creation_setting
 
     def params(self, *args, **kargs):
         # print(args, kargs)
@@ -31,19 +32,29 @@ class DeformationLayer(nn.Module):
         s = (next8(shape[-2]), next8(shape[-1]))
 
         noise_2d = []
-
+        
+        if self.random_df_creation_setting == 0:
+            random_scale_01 = 0
+            random_scale_02 = 0
+            random_scale_03 = 0
+        if self.random_df_creation_setting == 1:
+            x = np.random.uniform(0, 2.0)
+            random_scale_01 = x
+            random_scale_02 = x
+            random_scale_03 = x
+        if self.random_df_creation_setting == 2:
+            random_scale_01 = np.random.uniform(0, 2.0)
+            random_scale_02 = np.random.uniform(0, 2.0)
+            random_scale_03 = np.random.uniform(0, 2.0)
+        
         for i in range(shape[-3]):
-            noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05 # 0.05
-            noise_2d_i += rand_perlin_2d(s, (8, 8)) * 0.03 # 0.03
-            noise_2d_i += rand_perlin_2d(s, (2, 2)) * 0.2 # 0.2
+            noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05 * random_scale_01
+            noise_2d_i += rand_perlin_2d(s, (8, 8)) * 0.03 * random_scale_02
+            noise_2d_i += rand_perlin_2d(s, (2, 2)) * 0.2 * random_scale_03
             noise_2d_i = noise_2d_i[: shape[-2], : shape[-1]]
             noise_2d.append(noise_2d_i)
 
-        #print(noise_2d)
-
-        #print([noise_2d for _ in range(shape[-3])])
         self._parm = torch.stack(noise_2d, 0).unsqueeze(0).to(device)
-        #self._parm = torch.stack([noise_2d for _ in range(shape[-3])], 0).unsqueeze(0).to(device)
         self.field.condition_()
 
     def deform(self, i: torch.Tensor):

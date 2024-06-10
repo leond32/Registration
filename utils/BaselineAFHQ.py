@@ -29,7 +29,7 @@ def get_mean_std(images):
 ############################################################################################################
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, transform=None, device = "cpu"):
+    def __init__(self, image_paths, hparams, transform=None, device = "cpu"):
         """
         Args:
             image_paths (list): List of all image Paths.
@@ -41,6 +41,8 @@ class CustomDataset(Dataset):
         self.image_paths = image_paths
         self.transform = transform
         self.device = device
+        self.image_dimension = hparams['image_dimension']
+        self.random_df_creation_setting = hparams['random_df_creation_setting']
     
     def __len__(self):
         return len(self.image_paths)
@@ -50,7 +52,7 @@ class CustomDataset(Dataset):
         Build and return a new deformation layer for each call to __getitem__.
         This method returns the created deformation layer.
         """
-        deformation_layer = DeformationLayer(shape)
+        deformation_layer = DeformationLayer(shape, random_df_creation_setting=self.random_df_creation_setting)
         deformation_layer.new_deformation(device=device)
         return deformation_layer
 
@@ -62,7 +64,7 @@ class CustomDataset(Dataset):
             raise FileNotFoundError(f"Image not found at path: {image_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = Image.fromarray(img)
-        transform = transforms.Resize((128,128))
+        transform = transforms.Resize(self.image_dimension)
         img = transform(img)
         img = F.pil_to_tensor(img).float()
         shape = img.squeeze(0).shape
@@ -439,7 +441,9 @@ def main():
         'lr': 0.001,
         'weight_decay': 1e-5,
         'patience': 5,
-        'alpha': 0.00005
+        'alpha': 0,
+        'image_dimension': (128,128),
+        'random_df_creation_setting': 1
     }
     
     # add a configuration file to save the hyperparameters in the experiment directory
@@ -448,8 +452,8 @@ def main():
             f.write(f'{key}: {value}\n')
     
     # Create the datasets and dataloaders
-    train_dataset = CustomDataset(train_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
-    val_dataset = CustomDataset(val_images_paths, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
+    train_dataset = CustomDataset(train_images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
+    val_dataset = CustomDataset(val_images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
     train_loader = DataLoader(train_dataset, batch_size=hparams['batch_size'], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=hparams['batch_size'], shuffle=True)
 
