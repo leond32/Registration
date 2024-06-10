@@ -12,6 +12,7 @@ import cv2
 from torch.cuda.amp import GradScaler, autocast
 from PIL import Image
 import torchvision.transforms.functional as F
+import torch.nn.functional as t
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -231,8 +232,7 @@ def deform_image(deformed_image: torch.Tensor, displacement_field: torch.Tensor,
 
     # Interpolate original image using the new grid
     deformed_image = deformed_image.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, H, W)
-    deformed_image = F.grid_sample(deformed_image, new_grid, mode='bilinear', padding_mode='border')
-
+    deformed_image = t.grid_sample(deformed_image, new_grid, mode='bilinear', padding_mode='border')
     return deformed_image.squeeze(0).squeeze(0)
 
 ############################################################################################################
@@ -242,6 +242,17 @@ def normalize_image(image):
 
 ############################################################################################################
 
+def build_box_plot(data, title, x_label, y_label, save_path):
+    
+    # Boxplot of SSIM, PSNR, MSE, L1
+    plt.boxplot(data)
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.savefig(save_path)
+    plt.close()
+    
+############################################################################################################
 def compute_metrics(model, val_loader, device):
     # Compute similarity measures of image and redeformed image from validation data (SSIM, PSNR, MSE, L1)
     model.eval()
@@ -250,6 +261,11 @@ def compute_metrics(model, val_loader, device):
         avg_psnr = 0
         avg_mse = 0
         avg_l1 = 0
+
+        ssim_values = []
+        psnr_values = []
+        mse_values = []
+        l1_values = []
 
         total_images = 0
 
@@ -265,35 +281,103 @@ def compute_metrics(model, val_loader, device):
         
             for j in range(batch_size):
                 redeformed_image = deform_image(images[j, 1], outputs[j], device)
-            
+
                 # Normalize images before SSIM calculation
                 img_0_norm = normalize_image(images[j, 0].cpu().numpy())
+                
                 redeformed_img_norm = normalize_image(redeformed_image.cpu().numpy())
             
                 # SSIM
-                ssim_value = ssim(img_0_norm, redeformed_img_norm, data_range=1.0)
-                avg_ssim += ssim_value
-            
+                try:
+                    ssim_value = ssim(img_0_norm, redeformed_img_norm, data_range=1.0)
+                    ssim_values.append(ssim_value)
+                    avg_ssim += ssim_value
+                except:
+                    print('Error in SSIM calculation')
+                
                 # MSE
-                mse_value = F.mse_loss(images[j, 0], redeformed_image)
-                avg_mse += mse_value.item()
+                try: 
+                    mse_value = t.mse_loss(images[j, 0].to(device), redeformed_image.to(device))
+                    mse_values.append(mse_value.item())
+                    avg_mse += mse_value.item()
+                except:
+                    print('Error in MSE calculation')
             
                 # L1
-                l1_value = F.l1_loss(images[j, 0], redeformed_image)
-                avg_l1 += l1_value.item()
-            
+                try:
+                    l1_value = t.l1_loss(images[j, 0].to(device), redeformed_image.to(device))
+                    l1_values.append(l1_value.item())
+                    avg_l1 += l1_value.item()
+                except:
+                    print('Error in L1 calculation')
+               
                 # PSNR
-                psnr_value = 10 * torch.log10(1 / mse_value)
-                avg_psnr += psnr_value.item()
-    
+                try:
+                    psnr_value = 10 * torch.log10(1 / mse_value)
+                    psnr_values.append(psnr_value.item())
+                    avg_psnr += psnr_value.item()
+                except:
+                    print('Error in PSNR calculation')
+                    
         # Normalize by the total number of images processed
         avg_ssim /= total_images
         avg_psnr /= total_images
         avg_mse /= total_images
         avg_l1 /= total_images
-        
-        return avg_ssim, avg_psnr, avg_mse, avg_l1
+        print(f'Computed metrics on {total_images} images: SSIM={avg_ssim:.4f}, PSNR={avg_psnr:.4f}, MSE={avg_mse:.4f}, L1={avg_l1:.4f}')
+        return avg_ssim, avg_psnr, avg_mse, avg_l1, ssim_values, psnr_values, mse_values, l1_values
+############################################################################################################
+
+def save_loss_plot(experiment_dir):
+    # create the loss plot from the csv file and save it
+    csv_path = os.path.join(experiment_dir, 'losses.csv')
+    df = pd.read_csv(csv_path)
+    plt.plot(df['epoch'], df['train_loss'], label='Train Loss')
+    plt.plot(df['epoch'], df['val_loss'], label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig(os.path.join(experiment_dir, 'images', 'loss_plot.png'))
+    plt.close()
+   
+############################################################################################################
+
+def evaluate_model(model, val_loader, experiment_dir, device):
+    # Compute similarity measures of image and redeformed image from validation data (SSIM, PSNR, MSE, L1)
+    avg_ssim, avg_psnr, avg_mse, avg_l1, ssim_values, psnr_values, mse_values, l1_values = compute_metrics(model, val_loader, device)
     
+    # Create a metrics directory if it doesn't exist
+    if not os.path.exists(os.path.join(experiment_dir, 'metrics')):
+        os.makedirs(os.path.join(experiment_dir, 'metrics'))
+    
+    # Create a images directory if it doesn't exist
+    if not os.path.exists(os.path.join(experiment_dir, 'images')):
+        os.makedirs(os.path.join(experiment_dir, 'images'))
+    
+    # Save the metrics in a text file
+    with open(os.path.join(experiment_dir, 'metrics', 'metrics.txt'), 'w') as f:
+        f.write(f'Average SSIM: {avg_ssim}\n')
+        f.write(f'Average PSNR: {avg_psnr}\n')
+        f.write(f'Average MSE: {avg_mse}\n')
+        f.write(f'Average L1: {avg_l1}\n')
+    
+    # Boxplot of SSIM, PSNR, MSE, L1
+    build_box_plot([ssim_values], 'SSIM', 'SSIM', 'Values', os.path.join(experiment_dir, 'images', 'ssim_boxplot.png'))
+    
+    # Boxplot of PSNR
+    build_box_plot([psnr_values], 'PSNR', 'PSNR', 'Values', os.path.join(experiment_dir, 'images', 'psnr_boxplot.png'))
+    
+    # Boxplot of MSE
+    build_box_plot([mse_values], 'MSE', 'MSE', 'Values', os.path.join(experiment_dir, 'images', 'mse_boxplot.png'))
+    
+    # Boxplot of L1
+    build_box_plot([l1_values], 'L1', 'L1', 'Values', os.path.join(experiment_dir, 'images', 'l1_boxplot.png'))
+    
+    # Save metrics in a csv file
+    csv_path = os.path.join(experiment_dir, 'metrics', 'metrics.csv')
+    df = pd.DataFrame({'SSIM': ssim_values, 'PSNR': psnr_values, 'MSE': mse_values, 'L1': l1_values})
+    df.to_csv(csv_path, index=False)
+
 ############################################################################################################
             
 def main():
@@ -307,7 +391,7 @@ def main():
     
     # Define the paths to save the logs and the best model	
     log_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/AFHQ_Experiments' # Change if you dont train on AFHQ
-    experiment_name = 'Experiment_01' # Change this to a different name for each experiment 
+    experiment_name = 'Experiment_08' # Change this to a different name for each experiment 
     experiment_dir = os.path.join(log_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
     
@@ -324,12 +408,12 @@ def main():
     hparams = {
         'mean': 113,
         'std': 61,
-        'n_epochs': 20,
+        'n_epochs': 50,
         'batch_size': 16,
         'lr': 0.001,
         'weight_decay': 1e-5,
-        'patience': 10,
-        'alpha': 0.005
+        'patience': 5,
+        'alpha': 0.00005
     }
     
     # add a configuration file to save the hyperparameters in the experiment directory
@@ -364,20 +448,21 @@ def main():
         model.load_state_dict(torch.load(best_model_path, map_location=device))
 
     # Define the loss function and optimizer
-    criterion = nn.MSELoss() + gradient_regularization_loss
+    criterion = nn.MSELoss() 
     optimizer = optim.Adam(model.parameters(), lr=hparams['lr'], weight_decay=hparams['weight_decay'])
 
     # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
-
+    '''
     # after training, save an image of the loss and calculate some metrics on the validatuion set
     if not os.path.exists(os.path.join(experiment_dir, 'images')):
         os.makedirs(os.path.join(experiment_dir, 'images'))
     if not os.path.exists(os.path.join(experiment_dir, 'metrics')):
         os.makedirs(os.path.join(experiment_dir, 'metrics'))
-        
+    '''   
     # create the loss plot from the csv file and save it
-    csv_path = os.path.join(experiment_dir, 'losses.csv')
+    save_loss_plot(experiment_dir)
+    '''csv_path = os.path.join(experiment_dir, 'losses.csv')
     df = pd.read_csv(csv_path)
     plt.plot(df['epoch'], df['train_loss'], label='Train Loss')
     plt.plot(df['epoch'], df['val_loss'], label='Validation Loss')
@@ -385,15 +470,18 @@ def main():
     plt.ylabel('Loss')
     plt.legend()
     plt.savefig(os.path.join(experiment_dir, 'images', 'loss_plot.png'))
-    plt.close()
+    plt.close()'''
     
     # calculate metrics on the validation set and save them in a txt file
-    avg_ssim, avg_psnr, avg_mse, avg_l1 = compute_metrics(model, val_loader, device)
+    evaluate_model(model, val_loader, experiment_dir, device)
+    '''avg_ssim, avg_psnr, avg_mse, avg_l1, ssim_values, psnr_values, mse_values, l1_values = compute_metrics(model, val_loader, device)
+    print('Metrics calculated')
+    print(f'Average SSIM: {avg_ssim}, Average PSNR: {avg_psnr}, Average MSE: {avg_mse}, Average L1: {avg_l1}')
     with open(os.path.join(experiment_dir, 'metrics', 'metrics.txt'), 'w') as f:
         f.write(f'Average SSIM: {avg_ssim}\n')
         f.write(f'Average PSNR: {avg_psnr}\n')
         f.write(f'Average MSE: {avg_mse}\n')
-        f.write(f'Average L1: {avg_l1}\n')
+        f.write(f'Average L1: {avg_l1}\n')'''
     
     
 if __name__ == "__main__":
