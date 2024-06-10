@@ -244,14 +244,35 @@ def normalize_image(image):
 
 def build_box_plot(data, title, x_label, y_label, save_path):
     
-    # Boxplot of SSIM, PSNR, MSE, L1
-    plt.boxplot(data)
-    plt.title(title)
+    # Create the box plot
+    box_dict = plt.boxplot(data)
+    
+    # Collect all outliers
+    all_outliers = []
+    for flier in box_dict['fliers']:
+        all_outliers.extend(flier.get_ydata())
+    
+    # Calculate the number of outliers
+    n_outliers = len(all_outliers)
+    
+    # Calculate the total number of data points
+    if isinstance(data[0], list):
+        total_data_points = sum(len(d) for d in data)
+    else:
+        total_data_points = len(data)
+    
+    # Calculate the percentage of outliers
+    percentage_outliers = (n_outliers / total_data_points) * 100
+    
+    # Set plot title and labels
+    plt.title(title + f' (Outliers: {percentage_outliers:.2f}%)')
     plt.xlabel(x_label)
     plt.ylabel(y_label)
+    
+    # Save the plot
     plt.savefig(save_path)
     plt.close()
-    
+      
 ############################################################################################################
 def compute_metrics(model, val_loader, device):
     # Compute similarity measures of image and redeformed image from validation data (SSIM, PSNR, MSE, L1)
@@ -458,35 +479,12 @@ def main():
 
     # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
-    '''
-    # after training, save an image of the loss and calculate some metrics on the validatuion set
-    if not os.path.exists(os.path.join(experiment_dir, 'images')):
-        os.makedirs(os.path.join(experiment_dir, 'images'))
-    if not os.path.exists(os.path.join(experiment_dir, 'metrics')):
-        os.makedirs(os.path.join(experiment_dir, 'metrics'))
-    '''   
+    
     # create the loss plot from the csv file and save it
     save_loss_plot(experiment_dir)
-    '''csv_path = os.path.join(experiment_dir, 'losses.csv')
-    df = pd.read_csv(csv_path)
-    plt.plot(df['epoch'], df['train_loss'], label='Train Loss')
-    plt.plot(df['epoch'], df['val_loss'], label='Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.savefig(os.path.join(experiment_dir, 'images', 'loss_plot.png'))
-    plt.close()'''
     
     # calculate metrics on the validation set and save them in a txt file
     evaluate_model(model, val_loader, experiment_dir, device)
-    '''avg_ssim, avg_psnr, avg_mse, avg_l1, ssim_values, psnr_values, mse_values, l1_values = compute_metrics(model, val_loader, device)
-    print('Metrics calculated')
-    print(f'Average SSIM: {avg_ssim}, Average PSNR: {avg_psnr}, Average MSE: {avg_mse}, Average L1: {avg_l1}')
-    with open(os.path.join(experiment_dir, 'metrics', 'metrics.txt'), 'w') as f:
-        f.write(f'Average SSIM: {avg_ssim}\n')
-        f.write(f'Average PSNR: {avg_psnr}\n')
-        f.write(f'Average MSE: {avg_mse}\n')
-        f.write(f'Average L1: {avg_l1}\n')'''
     
     
 if __name__ == "__main__":
