@@ -329,6 +329,11 @@ def compute_metrics(model, val_loader, device):
 ############################################################################################################
 
 def save_loss_plot(experiment_dir):
+    
+    # Create a images directory if it doesn't exist
+    if not os.path.exists(os.path.join(experiment_dir, 'images')):
+        os.makedirs(os.path.join(experiment_dir, 'images'))
+        
     # create the loss plot from the csv file and save it
     csv_path = os.path.join(experiment_dir, 'losses.csv')
     df = pd.read_csv(csv_path)
