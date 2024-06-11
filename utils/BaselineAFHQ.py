@@ -470,6 +470,14 @@ def main():
         patch_size=1,
         attention_layer=None
     )
+    
+    # add model configuration to the config file
+    with open(os.path.join(experiment_dir, 'config.txt'), 'a') as f:
+        f.write(f'Model: {model}\n')
+        
+    # add the number of parameters to the config file
+    with open(os.path.join(experiment_dir, 'config.txt'), 'a') as f:
+        f.write(f'Number of parameters: {sum(p.numel() for p in model.parameters())}\n')
 
     model.to(device)
     
