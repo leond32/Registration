@@ -276,7 +276,10 @@ def build_box_plot(data, title, x_label, y_label, save_path):
     plt.close()
       
 ############################################################################################################
-def compute_metrics(model, val_loader, device):
+def compute_metrics(model,best_model_path, val_loader, device):
+    
+    # load the best weights
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
     # Compute similarity measures of image and redeformed image from validation data (SSIM, PSNR, MSE, L1)
     model.eval()
     with torch.no_grad():
@@ -370,9 +373,9 @@ def save_loss_plot(experiment_dir):
    
 ############################################################################################################
 
-def evaluate_model(model, val_loader, experiment_dir, device):
+def evaluate_model(model, val_loader, best_model_path, experiment_dir, device):
     # Compute similarity measures of image and redeformed image from validation data (SSIM, PSNR, MSE, L1)
-    avg_ssim, avg_psnr, avg_mse, avg_l1, ssim_values, psnr_values, mse_values, l1_values = compute_metrics(model, val_loader, device)
+    avg_ssim, avg_psnr, avg_mse, avg_l1, ssim_values, psnr_values, mse_values, l1_values = compute_metrics(model, best_model_path, val_loader, device)
     
     # Create a metrics directory if it doesn't exist
     if not os.path.exists(os.path.join(experiment_dir, 'metrics')):
@@ -496,7 +499,7 @@ def main():
     save_loss_plot(experiment_dir)
     
     # calculate metrics on the validation set and save them in a txt file
-    evaluate_model(model, val_loader, experiment_dir, device)
+    evaluate_model(model, val_loader,best_model_path, experiment_dir, device)
     
     
 if __name__ == "__main__":

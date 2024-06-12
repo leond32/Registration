@@ -34,9 +34,9 @@ class DeformationLayer(nn.Module):
         noise_2d = []
         
         if self.random_df_creation_setting == 0:
-            random_scale_01 = 0
-            random_scale_02 = 0
-            random_scale_03 = 0
+            random_scale_01 = 1
+            random_scale_02 = 1
+            random_scale_03 = 1
         if self.random_df_creation_setting == 1:
             x = np.random.uniform(0, 2.0)
             random_scale_01 = x
