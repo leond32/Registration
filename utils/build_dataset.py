@@ -3,6 +3,8 @@ import glob
 import nibabel as nib
 import numpy as np
 import cv2
+from crop_npy import remove_black_border
+from PIL import Image
 
 def read_nii_file(file_path):
     '''Read a .nii.gz file and return a NumPy array of type uint8 with values scaled between 0 and 255.'''
@@ -22,7 +24,48 @@ def read_nii_file(file_path):
 def save_image(image, file_path):
     cv2.imwrite(file_path, image)
 
+def check_image_information(image):
+    '''Check if the image is valid for further processing.'''
+    # Check if the image is mostly nonblack
+    threshold = 10
+    nonblack_pixels = np.sum(image > threshold)
+    total_pixels = image.shape[0] * image.shape[1]
+    nonblack_ratio = nonblack_pixels / total_pixels
+    if nonblack_ratio < 0.8:
+        return False
+    return True
+
+def check_image_ratio(image):
+    image_ratio = image.shape[1] / image.shape[0]
+    if image_ratio > 2 or image_ratio < 1:
+        return False    
+    return True
+    
+
+def crop_to_aspect_ratio_and_resize(image, target_ratio, target_witdh):
+    # Get the current size of the image
+    width, height = image.size
+    current_ratio = width / height
+    
+    if current_ratio > target_ratio:
+        # Crop the width
+        new_width = int(height * target_ratio)
+        offset = (width - new_width) // 2
+        box = (offset, 0, width - offset, height)
+    else:
+        # Crop the height
+        new_height = int(width / target_ratio)
+        offset = (height - new_height) // 2
+        box = (0, offset, width, height - offset)
+    cropped_image = image.crop(box)
+    target_height = int(target_witdh / target_ratio)
+    resized_image = cropped_image.resize((target_witdh, target_height))
+    resized_image = np.array(resized_image)
+    return resized_image
+
+
 def build_dataset(input_folder, output_folder, image_type):
+    image_slice_sizes = []
     # Get all subfolders in the input folder
     subfolders = glob.glob(input_folder + '/*')
     for subfolder in subfolders:
@@ -37,16 +80,21 @@ def build_dataset(input_folder, output_folder, image_type):
             # Save image slices
             for i in range(image.shape[0]):
                 image_slice = image[i, :, :]
-                if not os.path.exists(output_folder + '/' + last_part + '/fixed'):
-                    os.makedirs(output_folder + '/' + last_part + '/fixed')
-                save_image(image_slice, output_folder + '/' + last_part + '/fixed/'+ last_part +'_slice_{:03d}_fixed.png'.format(i)) 
+                image_slice = remove_black_border(image_slice, threshold=20)
+                if not os.path.exists(output_folder + '/' + last_part):
+                    os.makedirs(output_folder + '/' + last_part)
+                if check_image_information(image_slice) and check_image_ratio(image_slice):
+                    image_slice = crop_to_aspect_ratio_and_resize(Image.fromarray(image_slice), 1.5, 256)
+                    image_slice_sizes = image_slice_sizes + [image_slice.shape]
+                    save_image(image_slice, output_folder + '/' + last_part + '/'+ last_part +'_slice_{:03d}.png'.format(i)) 
+    return image_slice_sizes
 
 def main():
     # Build dataset for T1 images
-    build_dataset('/vol/aimspace/projects/practical_SoSe24/segmentation/dataset-spider/rawdata_normalized', '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/dataset_2D_T1', 'T1w')
+    sizes1 = build_dataset('D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\rawdata_normalized', 'D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\Datasets\\T1w', 'T1w')
     # Build dataset for T2 images
-    build_dataset('/vol/aimspace/projects/practical_SoSe24/segmentation/dataset-spider/rawdata_normalized', '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/dataset_2D_T2', 'T2w')
-    
+    sizes2 = build_dataset('D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\rawdata_normalized', 'D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\Datasets\\T2w', 'T2w')
+    print(min(sizes1), max(sizes1))
     
 if __name__ == "__main__":
     main()
