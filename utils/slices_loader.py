@@ -32,8 +32,8 @@ def process_file(file_path, save_dir, prefix):
     # Save each slice separately
     for i in range(numpy_sliced.shape[0]):
         slice_ = numpy_sliced[i, :, :]
-        slice_ = remove_black_border(slice_, threshold=20)
-        slice_filename = f'{prefix}_slice_{i+1}.npy'
+        slice_ = remove_black_border(slice_, threshold=5)
+        slice_filename = f'{prefix}_slice_{i+1}.npy' #.npy
         slice_save_path = os.path.join(save_dir, slice_filename)
         np.save(slice_save_path, slice_)
         print(f"Saved {slice_save_path}")
