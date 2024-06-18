@@ -1,12 +1,16 @@
 import numpy as np
+import cv2
 
-def remove_black_border(input_array, threshold=20):
+def median_filter(image, kernel_size=11):
+    return cv2.medianBlur(image, kernel_size)
+
+def remove_black_border(input_array, threshold=40):
     # Ensure input is a 2D grayscale image
     if len(input_array.shape) != 2:
         raise ValueError("Input array must be a 2D grayscale image")
-
+    median_array = median_filter(input_array, kernel_size=21)
     # Create a mask of the pixels that are not black (or within the threshold)
-    mask = input_array > threshold
+    mask = median_array > threshold
 
     # Find the coordinates of non-black pixels
     coords = np.argwhere(mask)

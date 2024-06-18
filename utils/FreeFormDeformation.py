@@ -38,14 +38,14 @@ class DeformationLayer(nn.Module):
             random_scale_02 = 1
             random_scale_03 = 1
         if self.random_df_creation_setting == 1:
-            x = np.random.uniform(0, 2.0)
+            x = np.random.uniform(0, 1.0)
             random_scale_01 = x
             random_scale_02 = x
             random_scale_03 = x
         if self.random_df_creation_setting == 2:
-            random_scale_01 = np.random.uniform(0, 2.0)
-            random_scale_02 = np.random.uniform(0, 2.0)
-            random_scale_03 = np.random.uniform(0, 2.0)
+            random_scale_01 = np.random.uniform(0, 3)
+            random_scale_02 = np.random.uniform(0, 1.5)
+            random_scale_03 = np.random.uniform(0, 1)
         
         for i in range(shape[-3]):
             noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05 * random_scale_01
