@@ -636,7 +636,7 @@ def main():
         dataset = CustomDataset(images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
         logging.info(f'Loaded dataset with {len(dataset)} samples')
         augmented_dataset.append(dataset)
-    logging.info(f'Loaded augmented dataset with {len(augmented_dataset)} augmented datasets')
+    logging.info(f'Loaded augmented dataset with {len(augmented_dataset)} samples')
     #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     
     # random split of Dataset
