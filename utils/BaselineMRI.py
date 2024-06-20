@@ -18,6 +18,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
+import logging
 
 ############################################################################################################
 
@@ -49,7 +50,6 @@ def calculate_mean_std_from_batches(data_loader, num_batches=20):
     std = torch.sqrt(sum_of_squared_diff / (total_images * images.shape[2] * images.shape[3]))
 
     return mean.tolist(), std.tolist()
-
 ############################################################################################################
 
 def plot_images(data_loader, experiment_dir, num_samples=10):
@@ -183,6 +183,7 @@ def gradient_regularization_loss(deformation_field):
 ############################################################################################################        
 
 def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs, device, log_dir='afhq_logs', patience=5, alpha=0.05):
+    logging.info(f'Started training the model for {n_epochs} epochs...')
     # Create directories if they don't exist
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -215,6 +216,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
             optimizer.step()
                 
         avg_train_loss = train_loss / len(train_loader)
+        logging.info(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.8f}')
         train_losses.append(avg_train_loss)
         
         model.eval()
@@ -229,6 +231,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
                 val_loss += batch_loss.item()
                 
         avg_val_loss = val_loss / len(val_loader)
+        logging.info(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.8f}')
         val_losses.append(avg_val_loss)
 
         # Print training and validation losses to console
@@ -245,12 +248,16 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
             best_val_loss = avg_val_loss
             best_epoch = epoch + 1
             torch.save(model.state_dict(), os.path.join(log_dir, 'best_model.pth'))
+            logging.info(f'Model saved at epoch {epoch+1} with validation loss {avg_val_loss:.8f}')
             print(f'Model saved at epoch {epoch+1} with validation loss {avg_val_loss:.8f}')
+        else:
+            logging.info(f'No improvement in validation loss since epoch {best_epoch}')
+            print(f'No improvement in validation loss since epoch {best_epoch}')
         
-
         # Check for early stopping
         if early_stopping(val_losses, patience):
             print('Early stopping...')
+            logging.info('Early stopping...')
             break          
     
 ############################################################################################################    
@@ -580,15 +587,23 @@ def main():
     
     
     # Define the paths to save the logs and the best model	
-    log_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/first_training' # Change if you dont train on AFHQ
+    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/first_training' # Change if you dont train on AFHQ
     experiment_name = 'Experiment_01' # Change this to a different name for each experiment 
-    experiment_dir = os.path.join(log_dir, experiment_name)
+    experiment_dir = os.path.join(experiments_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
+    log_dir = os.path.join(experiment_dir, 'logs')
     
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    if not os.path.exists(experiments_dir):
+        os.makedirs(experiments_dir)
     if not os.path.exists(experiment_dir):
         os.makedirs(experiment_dir)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Set up logging
+    logging.basicConfig(filename=os.path.join(log_dir,'log_file.log'), level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info('Started running the training script...')
     
     # Get the image paths for dynamic dataset creation    
     images_paths = get_image_paths(data_path)
@@ -605,8 +620,10 @@ def main():
         'alpha': 0,
         'random_df_creation_setting': 2,
         'T_weighting': 2,
-        'image_dimension': (256,256)
+        'image_dimension': (256,256),
+        'augmenstation_factor': 4,
     }
+    logging.info(f'Loaded hyperparameters: {hparams}')
     
     # add a configuration file to save the hyperparameters in the experiment directory
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
@@ -614,14 +631,21 @@ def main():
             f.write(f'{key}: {value}\n')
     
     # Create the datasets and dataloaders
-    dataset = CustomDataset(images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
+    augmented_dataset = []
+    for i in range(hparams['augmenstation_factor']):
+        dataset = CustomDataset(images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
+        logging.info(f'Loaded dataset with {len(dataset)} samples')
+        augmented_dataset.append(dataset)
+    logging.info(f'Loaded augmented dataset with {len(augmented_dataset)} augmented datasets')
     #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     
     # random split of Dataset
-    train_size = int(0.8 * len(dataset))
-    val_size = int(0.1 * len(dataset))
-    test_size = len(dataset) - train_size - val_size
-    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+    train_size = int(0.8 * len(augmented_dataset))
+    val_size = int(0.1 * len(augmented_dataset))
+    test_size = len(augmented_dataset) - train_size - val_size
+    train_dataset, val_dataset, test_dataset = random_split(augmented_dataset, [train_size, val_size, test_size])
+    
+    logging.info(f'Loaded dataset with {len(train_dataset)} training samples, {len(val_dataset)} validation samples, and {len(test_dataset)} test samples')
 
     train_loader = DataLoader(train_dataset, batch_size=hparams['batch_size'], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=hparams['batch_size'], shuffle=True)
@@ -648,6 +672,7 @@ def main():
         patch_size=1,
         attention_layer=None
     )
+    logging.info(f'Loaded model with {sum(p.numel() for p in model.parameters())} parameters')
     
     # add model configuration to the config file
     with open(os.path.join(experiment_dir, 'config.txt'), 'a') as f:
@@ -658,6 +683,7 @@ def main():
         f.write(f'Number of parameters: {sum(p.numel() for p in model.parameters())}\n')
 
     model.to(device)
+    logging.info(f'Moved model to device {device}')
     
     # Check if weights file exists
     if os.path.isfile(best_model_path):
@@ -666,18 +692,23 @@ def main():
     # Define the loss function and optimizer
     criterion = nn.MSELoss() 
     optimizer = optim.Adam(model.parameters(), lr=hparams['lr'], weight_decay=hparams['weight_decay'])
+    logging.info(f'Initialized optimizer with learning rate {hparams["lr"]} and weight decay {hparams["weight_decay"]}')
 
     # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
+    logging.info('Finished training the model')
     
     # create the loss plot from the csv file and save it
     save_loss_plot(experiment_dir)
+    logging.info('Saved the loss plot')
     
     # calculate metrics on the validation set and save them in a txt file
     evaluate_model(model, val_loader,best_model_path, experiment_dir, device)
+    logging.info('Saved the metrics')
     
     # plot results
     plot_results(model, val_loader, experiment_dir, device, num_samples=10)
+    logging.info('Saved image of some results')
     
     
     
