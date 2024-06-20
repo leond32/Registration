@@ -161,6 +161,124 @@ class CustomDataset(Dataset):
     
 ############################################################################################################
 
+class CustomDataset_T1w_T2w(Dataset):
+    def __init__(self, image_paths_T1, image_paths_T2, hparams, transform=None, device = "cpu"):
+        """
+        Args:
+            image_paths_T1 (list): List of all image Paths of T1w.
+            image_paths_T2 (list): List of all image Paths of T2w.
+            shape: The shape of one image in the dataset.
+            mean (float): The mean value for normalization.
+            std (float): The standard deviation for normalization.
+            transform (bool): Whether to apply the transformation.
+        """
+        self.image_paths_T1 = image_paths_T1
+        self.image_paths_T2 = image_paths_T2
+        self.transform = transform
+        self.device = device
+        self.image_dimension = hparams['image_dimension']
+        self.random_df_creation_setting = hparams['random_df_creation_setting']
+        self.modality_generalization = hparams['modality_generalization']
+    
+    def __len__(self):
+        return len(self.image_paths_T1)
+    
+    def build_deformation_layer(self, shape, device):
+        """
+        Build and return a new deformation layer for each call to __getitem__.
+        This method returns the created deformation layer.
+        """
+        deformation_layer = DeformationLayer(shape, random_df_creation_setting=self.random_df_creation_setting)
+        deformation_layer.new_deformation(device=device)
+        return deformation_layer
+
+    def __getitem__(self, idx):
+        
+        # modality generalization: Randomly choose a T1w or T2w for the fixed image path
+        if self.modality_generalization:
+            fixed_image_path = random.choice([self.image_paths_T1[idx], self.image_paths_T2[idx]])
+            
+            if fixed_image_path == self.image_paths_T1[idx]:
+                corresponding_images = self.image_paths_T2
+            else:
+                corresponding_images = self.image_paths_T1
+
+            # Find the corresponding moving image
+            moving_image_path = fixed_image_path
+            for path in corresponding_images:
+                if fixed_image_path.split('/')[-1] in path:
+                    moving_image_path = path
+                    break
+            
+            # Randomly choose between the potential moving images
+            moving_image_path = random.choice([moving_image_path, fixed_image_path]) 
+        
+        else:
+            fixed_image_path = self.image_paths_T1[idx]
+            for i in range(len(self.image_paths_T2)):
+                if fixed_image_path.split('/')[-1] in self.image_paths_T2[i]:
+                    moving_image_path = self.image_paths_T2[i]
+                    break
+                else:
+                    moving_image_path = fixed_image_path
+        
+        # fetch the fixed image
+        fixed_img = cv2.imread(fixed_image_path)
+        if fixed_img is None:
+            raise FileNotFoundError(f"Image not found at path: {fixed_image_path}")
+        fixed_img = cv2.cvtColor(fixed_img, cv2.COLOR_BGR2GRAY)
+        fixed_img = Image.fromarray(fixed_img)
+        
+        # fetch the moving image
+        moving_img = cv2.imread(moving_image_path)
+        if moving_img is None:
+            raise FileNotFoundError(f"Image not found at path: {moving_image_path}")
+
+        moving_img = cv2.cvtColor(moving_img, cv2.COLOR_BGR2GRAY)
+        moving_img = Image.fromarray(moving_img)
+        
+        # define transformations to apply to the images
+        buffer_img = F.pil_to_tensor(fixed_img)
+        fixed_img_shape = buffer_img.squeeze(0).shape
+        transform = transforms.Resize(fixed_img_shape)
+        transform2 = transforms.CenterCrop(self.image_dimension)
+        
+        # images need have the same shape
+        moving_img = transform(moving_img)
+        # apply the same random crop to the fixed and moving image
+        fixed_img = transform2(fixed_img)
+        moving_img = transform2(moving_img)
+        
+        # transform to tensor
+        fixed_img = F.pil_to_tensor(fixed_img).float()
+        moving_img = F.pil_to_tensor(moving_img).float()
+        
+        # shape = img.squeeze(0).shape
+        shape = fixed_img.squeeze(0).T.shape
+        original_image= fixed_img.to(self.device)
+        to_deform_image = moving_img.to(self.device)
+        
+        # Build a new deformation layer for the current image
+        deformation_layer = self.build_deformation_layer(shape, self.device).to(self.device)
+
+        # Apply deformation to get the deformed image
+        deformed_image = deformation_layer.deform(to_deform_image)
+        
+        # Fetch the current deformation field
+        deformation_field = deformation_layer.get_deformation_field().squeeze(0).to(self.device)
+        
+        # transform the images
+        if self.transform:
+            original_image = self.transform(original_image)
+            deformed_image = self.transform(deformed_image)
+
+        # Stack the original and deformed images along the channel dimension
+        stacked_image = torch.cat([original_image, deformed_image], dim=0).squeeze(0)
+
+        return stacked_image, deformation_field
+    
+
+############################################################################################################
 def early_stopping(val_losses, patience=5):
     if len(val_losses) < patience:
         return False
@@ -258,7 +376,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
         if early_stopping(val_losses, patience):
             print('Early stopping...')
             logging.info('Early stopping...')
-            break          
+            break    
+        
+      
     
 ############################################################################################################    
 
@@ -583,11 +703,12 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the paths to the training and validation data
-    data_path = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI_Slices_PNG/MRI_slices_diff_res/dataset_2D_T2w'
+    data_path_T1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI_Slices_PNG/MRI_slices_diff_res/dataset_2D_T1w'
+    data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI_Slices_PNG/MRI_slices_diff_res/dataset_2D_T2w'
     
     
     # Define the paths to save the logs and the best model	
-    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/first_training' # Change if you dont train on AFHQ
+    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/Try_2_Modalities' # Change if you dont train on AFHQ
     experiment_name = 'Experiment_01' # Change this to a different name for each experiment 
     experiment_dir = os.path.join(experiments_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
@@ -605,14 +726,11 @@ def main():
                     format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info('Started running the training script...')
     
-    # Get the image paths for dynamic dataset creation    
-    images_paths = get_image_paths(data_path)
-    
     # Define the hyperparameters
     hparams = {
         'mean': 118,
         'std': 70,
-        'n_epochs': 400,
+        'n_epochs': 1,
         'batch_size': 16,
         'lr': 0.001,
         'weight_decay': 1e-5,
@@ -621,7 +739,8 @@ def main():
         'random_df_creation_setting': 2,
         'T_weighting': 2,
         'image_dimension': (256,256),
-        'augmenstation_factor': 4,
+        'augmentation_factor': 4,
+        'modality_generalization': True
     }
     logging.info(f'Loaded hyperparameters: {hparams}')
     
@@ -631,19 +750,27 @@ def main():
             f.write(f'{key}: {value}\n')
     
     # Create the datasets and dataloaders
+    # Get the image paths for dynamic dataset creation    
+    images_paths_t1 = get_image_paths(data_path_T1)
+    images_paths_t2 = get_image_paths(data_path_T1)
     augmented_dataset = []
-    for i in range(hparams['augmenstation_factor']):
-        dataset = CustomDataset(images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
+    for i in range(hparams['augmentation_factor']):
+        dataset = CustomDataset_T1w_T2w(images_paths_t1, images_paths_t2, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
         logging.info(f'Loaded dataset with {len(dataset)} samples')
         augmented_dataset.append(dataset)
     logging.info(f'Loaded augmented dataset with {len(augmented_dataset)} samples')
     #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     
+    '''# Create the datasets and dataloaders for T1w and T2w images (evaluation)
+    fixed_images_paths = get_image_paths(data_path_T1)
+    moving_images_paths = get_image_paths(data_path_T2)
+    dataset = CustomDataset_T1w_T2w(fixed_images_paths, moving_images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)'''
+    
     # random split of Dataset
     train_size = int(0.8 * len(augmented_dataset))
     val_size = int(0.1 * len(augmented_dataset))
     test_size = len(augmented_dataset) - train_size - val_size
-    train_dataset, val_dataset, test_dataset = random_split(augmented_dataset, [train_size, val_size, test_size])
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
     
     logging.info(f'Loaded dataset with {len(train_dataset)} training samples, {len(val_dataset)} validation samples, and {len(test_dataset)} test samples')
 
