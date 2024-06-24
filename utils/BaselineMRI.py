@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset, ConcatDataset, random_split
 from torchvision import transforms
 from FreeFormDeformation import DeformationLayer
 from deepali.core import functional as U
@@ -194,7 +194,7 @@ class CustomDataset_T1w_T2w(Dataset):
 
     def __getitem__(self, idx):
         
-        # modality generalization: Randomly choose a T1w or T2w for the fixed image path
+        '''# modality generalization: Randomly choose a T1w or T2w for the fixed image path
         if self.modality_generalization:
             fixed_image_path = random.choice([self.image_paths_T1[idx], self.image_paths_T2[idx]])
             
@@ -211,7 +211,24 @@ class CustomDataset_T1w_T2w(Dataset):
                     break
             
             # Randomly choose between the potential moving images
-            moving_image_path = random.choice([moving_image_path, fixed_image_path]) 
+            moving_image_path = random.choice([moving_image_path, fixed_image_path]) '''
+            
+        if self.modality_generalization:
+            # Randomly choose a T1w or T2w for the fixed image path
+            if random.choice([True, False]):
+                fixed_image_path = self.image_paths_T1[idx]
+                corresponding_images = self.image_paths_T2
+            else:
+                fixed_image_path = self.image_paths_T2[idx]
+                corresponding_images = self.image_paths_T1
+
+            # Find the corresponding moving image
+            fixed_image_name = os.path.basename(fixed_image_path)
+            moving_image_path = fixed_image_path  # Default to the same path if not found
+            for path in corresponding_images:
+                if fixed_image_name == os.path.basename(path):
+                    moving_image_path = path
+                    break
         
         else:
             fixed_image_path = self.image_paths_T1[idx]
@@ -435,11 +452,12 @@ def deform_image(deformed_image: torch.Tensor, displacement_field: torch.Tensor,
 
 ############################################################################################################
 
-def plot_results(model, data_loader, experiment_dir, device, num_samples=10):
+def plot_results(model, best_model_path, data_loader, experiment_dir, device, num_samples=10):
     # Create a images directory if it doesn't exist
     if not os.path.exists(os.path.join(experiment_dir, 'images')):
         os.makedirs(os.path.join(experiment_dir, 'images'))
         
+    model.load_state_dict(torch.load(best_model_path, map_location=device))    
     model.eval()
     with torch.no_grad():
         images, deformation_fields = next(iter(data_loader))
@@ -709,7 +727,7 @@ def main():
     
     # Define the paths to save the logs and the best model	
     experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/Try_2_Modalities' # Change if you dont train on AFHQ
-    experiment_name = 'Experiment_01' # Change this to a different name for each experiment 
+    experiment_name = 'Experiment_03' # Change this to a different name for each experiment 
     experiment_dir = os.path.join(experiments_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
     log_dir = os.path.join(experiment_dir, 'logs')
@@ -730,7 +748,7 @@ def main():
     hparams = {
         'mean': 118,
         'std': 70,
-        'n_epochs': 1,
+        'n_epochs': 50,
         'batch_size': 16,
         'lr': 0.001,
         'weight_decay': 1e-5,
@@ -739,7 +757,7 @@ def main():
         'random_df_creation_setting': 2,
         'T_weighting': 2,
         'image_dimension': (256,256),
-        'augmentation_factor': 4,
+        'augmentation_factor': 6,
         'modality_generalization': True
     }
     logging.info(f'Loaded hyperparameters: {hparams}')
@@ -751,25 +769,26 @@ def main():
     
     # Create the datasets and dataloaders
     # Get the image paths for dynamic dataset creation    
-    images_paths_t1 = get_image_paths(data_path_T1)
-    images_paths_t2 = get_image_paths(data_path_T1)
+    image_paths_T1 = get_image_paths(data_path_T1)
+    image_paths_T2 = get_image_paths(data_path_T2)
     augmented_dataset = []
-    for i in range(hparams['augmentation_factor']):
+    
+    '''for i in range(hparams['augmentation_factor']):
         dataset = CustomDataset_T1w_T2w(images_paths_t1, images_paths_t2, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
         logging.info(f'Loaded dataset with {len(dataset)} samples')
-        augmented_dataset.append(dataset)
-    logging.info(f'Loaded augmented dataset with {len(augmented_dataset)} samples')
+        augmented_dataset.extend(dataset)'''
+        
+    # Create the datasets
+    datasets = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device) for _ in range(hparams['augmentation_factor'])]
+    dataset = ConcatDataset(datasets)
+    logging.info(f'Loaded augmented dataset with {len(dataset)} samples')
     #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     
-    '''# Create the datasets and dataloaders for T1w and T2w images (evaluation)
-    fixed_images_paths = get_image_paths(data_path_T1)
-    moving_images_paths = get_image_paths(data_path_T2)
-    dataset = CustomDataset_T1w_T2w(fixed_images_paths, moving_images_paths, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)'''
     
     # random split of Dataset
-    train_size = int(0.8 * len(augmented_dataset))
-    val_size = int(0.1 * len(augmented_dataset))
-    test_size = len(augmented_dataset) - train_size - val_size
+    train_size = int(0.8 * len(dataset))
+    val_size = int(0.1 * len(dataset))
+    test_size = len(dataset) - train_size - val_size
     train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
     
     logging.info(f'Loaded dataset with {len(train_dataset)} training samples, {len(val_dataset)} validation samples, and {len(test_dataset)} test samples')
@@ -815,6 +834,9 @@ def main():
     # Check if weights file exists
     if os.path.isfile(best_model_path):
         model.load_state_dict(torch.load(best_model_path, map_location=device))
+        logging.info('Loaded existing weights from previous experiment')
+    else:
+        logging.info('No existing weights loaded')
 
     # Define the loss function and optimizer
     criterion = nn.MSELoss() 
@@ -830,11 +852,11 @@ def main():
     logging.info('Saved the loss plot')
     
     # calculate metrics on the validation set and save them in a txt file
-    evaluate_model(model, val_loader,best_model_path, experiment_dir, device)
+    evaluate_model(model, val_loader, best_model_path, experiment_dir, device)
     logging.info('Saved the metrics')
     
     # plot results
-    plot_results(model, val_loader, experiment_dir, device, num_samples=10)
+    plot_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=10)
     logging.info('Saved image of some results')
     
     
