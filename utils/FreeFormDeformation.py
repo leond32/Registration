@@ -13,7 +13,7 @@ def next8(number: int):
 
 
 class DeformationLayer(nn.Module):
-    def __init__(self, shape, random_df_creation_setting = 0, stride=10) -> None:
+    def __init__(self, shape, fixed_img_DF=False, random_df_creation_setting = 0, stride=10) -> None:
         super().__init__()
         self.shape = shape
         grid = Grid(size=shape)
@@ -22,6 +22,7 @@ class DeformationLayer(nn.Module):
         self.transformer = ImageTransformer(self.field)
         self.transformer_inv = ImageTransformer(self.field.inverse(link=True))
         self.random_df_creation_setting = random_df_creation_setting
+        self.fixed_img_DF = fixed_img_DF
 
     def params(self, *args, **kargs):
         # print(args, kargs)
@@ -47,13 +48,23 @@ class DeformationLayer(nn.Module):
             random_scale_02 = np.random.uniform(0, 1.5)
             random_scale_03 = np.random.uniform(0, 1)
         
-        for i in range(shape[-3]):
-            noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05 * random_scale_01
-            noise_2d_i += rand_perlin_2d(s, (8, 8)) * 0.03 * random_scale_02
-            noise_2d_i += rand_perlin_2d(s, (2, 2)) * 0.2 * random_scale_03
-            noise_2d_i = noise_2d_i[: shape[-2], : shape[-1]]
-            noise_2d.append(noise_2d_i)
-
+        if self.fixed_img_DF:
+            # If fixed_img_DF is True, create a small deformation that is applied to the fixed and moving image (used for data augmentation)
+            random_scale = np.random.uniform(0, 1)
+            for i in range(shape[-3]):
+                noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05 * random_scale
+                noise_2d_i += rand_perlin_2d(s, (8, 8)) * 0.03 * random_scale
+                noise_2d_i += rand_perlin_2d(s, (2, 2)) * 0.2 * random_scale
+                noise_2d_i = noise_2d_i[: shape[-2], : shape[-1]]
+                noise_2d.append(noise_2d_i)
+        else:
+            for i in range(shape[-3]):
+                noise_2d_i = rand_perlin_2d(s, (4, 4)) * 0.05 * random_scale_01
+                noise_2d_i += rand_perlin_2d(s, (8, 8)) * 0.03 * random_scale_02
+                noise_2d_i += rand_perlin_2d(s, (2, 2)) * 0.2 * random_scale_03
+                noise_2d_i = noise_2d_i[: shape[-2], : shape[-1]]
+                noise_2d.append(noise_2d_i)
+        
         self._parm = torch.stack(noise_2d, 0).unsqueeze(0).to(device)
         self.field.condition_()
 

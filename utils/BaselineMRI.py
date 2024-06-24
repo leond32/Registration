@@ -162,7 +162,7 @@ class CustomDataset(Dataset):
 ############################################################################################################
 
 class CustomDataset_T1w_T2w(Dataset):
-    def __init__(self, image_paths_T1, image_paths_T2, hparams, transform=None, device = "cpu"):
+    def __init__(self, image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=None, device="cpu"):
         """
         Args:
             image_paths_T1 (list): List of all image Paths of T1w.
@@ -178,42 +178,25 @@ class CustomDataset_T1w_T2w(Dataset):
         self.device = device
         self.image_dimension = hparams['image_dimension']
         self.random_df_creation_setting = hparams['random_df_creation_setting']
-        self.modality_generalization = hparams['modality_generalization']
+        self.modality_mixing = hparams['modality_mixing']
+        self.T_weighting = hparams['T_weighting']
+        self.dataset_augmentation = dataset_augmentation
     
     def __len__(self):
         return len(self.image_paths_T1)
     
-    def build_deformation_layer(self, shape, device):
+    def build_deformation_layer(self, shape, device, fixed_img_DF=False):
         """
         Build and return a new deformation layer for each call to __getitem__.
         This method returns the created deformation layer.
         """
-        deformation_layer = DeformationLayer(shape, random_df_creation_setting=self.random_df_creation_setting)
+        deformation_layer = DeformationLayer(shape, fixed_img_DF, random_df_creation_setting=self.random_df_creation_setting)
         deformation_layer.new_deformation(device=device)
         return deformation_layer
 
     def __getitem__(self, idx):
-        
-        '''# modality generalization: Randomly choose a T1w or T2w for the fixed image path
-        if self.modality_generalization:
-            fixed_image_path = random.choice([self.image_paths_T1[idx], self.image_paths_T2[idx]])
             
-            if fixed_image_path == self.image_paths_T1[idx]:
-                corresponding_images = self.image_paths_T2
-            else:
-                corresponding_images = self.image_paths_T1
-
-            # Find the corresponding moving image
-            moving_image_path = fixed_image_path
-            for path in corresponding_images:
-                if fixed_image_path.split('/')[-1] in path:
-                    moving_image_path = path
-                    break
-            
-            # Randomly choose between the potential moving images
-            moving_image_path = random.choice([moving_image_path, fixed_image_path]) '''
-            
-        if self.modality_generalization:
+        if self.modality_mixing:
             # Randomly choose a T1w or T2w for the fixed image path
             if random.choice([True, False]):
                 fixed_image_path = self.image_paths_T1[idx]
@@ -231,13 +214,15 @@ class CustomDataset_T1w_T2w(Dataset):
                     break
         
         else:
-            fixed_image_path = self.image_paths_T1[idx]
-            for i in range(len(self.image_paths_T2)):
-                if fixed_image_path.split('/')[-1] in self.image_paths_T2[i]:
-                    moving_image_path = self.image_paths_T2[i]
-                    break
-                else:
-                    moving_image_path = fixed_image_path
+            # choose the same modality for fixed and moving image
+            if self.T_weighting == 1:
+                # choose T1w
+                fixed_image_path = self.image_paths_T1[idx]
+            elif self.T_weighting == 2:
+                # choose T2w
+                fixed_image_path = self.image_paths_T2[idx]
+            else: 
+                raise ValueError('T_weighting must be 1 or 2! If modality_mixing is True, T_weighting is not used!')
         
         # fetch the fixed image
         fixed_img = cv2.imread(fixed_image_path)
@@ -253,7 +238,7 @@ class CustomDataset_T1w_T2w(Dataset):
 
         moving_img = cv2.cvtColor(moving_img, cv2.COLOR_BGR2GRAY)
         moving_img = Image.fromarray(moving_img)
-        
+            
         # define transformations to apply to the images
         buffer_img = F.pil_to_tensor(fixed_img)
         fixed_img_shape = buffer_img.squeeze(0).shape
@@ -272,11 +257,18 @@ class CustomDataset_T1w_T2w(Dataset):
         
         # shape = img.squeeze(0).shape
         shape = fixed_img.squeeze(0).T.shape
-        original_image= fixed_img.to(self.device)
+        original_image = fixed_img.to(self.device)
         to_deform_image = moving_img.to(self.device)
         
-        # Build a new deformation layer for the current image
-        deformation_layer = self.build_deformation_layer(shape, self.device).to(self.device)
+        # if dataset augmentation is enabled, build a deformation layer that is applied to the fixed and moving image
+        if self.dataset_augmentation:
+            deformation_layer_01 = self.build_deformation_layer(shape, self.device, fixed_img_DF=True).to(self.device)
+            # Apply deformation to get the deformed images (fixed and moving image, that are used as new datapairs)
+            original_image = deformation_layer_01.deform(original_image)
+            to_deform_image = deformation_layer_01.deform(to_deform_image)
+        
+        # Build a new deformation layer to deform the moving image (to_deform_image)
+        deformation_layer = self.build_deformation_layer(shape, self.device, fixed_img_DF=False).to(self.device)
 
         # Apply deformation to get the deformed image
         deformed_image = deformation_layer.deform(to_deform_image)
@@ -744,7 +736,8 @@ def main():
                     format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info('Started running the training script...')
     
-    # Define the hyperparameters
+    # Define the hyperparameters for dataset creation and training
+
     hparams = {
         'mean': 118,
         'std': 70,
@@ -758,7 +751,7 @@ def main():
         'T_weighting': 2,
         'image_dimension': (256,256),
         'augmentation_factor': 6,
-        'modality_generalization': True
+        'modality_mixing': False
     }
     logging.info(f'Loaded hyperparameters: {hparams}')
     
@@ -767,20 +760,16 @@ def main():
         for key, value in hparams.items():
             f.write(f'{key}: {value}\n')
     
-    # Create the datasets and dataloaders
-    # Get the image paths for dynamic dataset creation    
+
+    # Get the image paths of the T1w and T2w MRI-Images for dynamic dataset creation    
     image_paths_T1 = get_image_paths(data_path_T1)
     image_paths_T2 = get_image_paths(data_path_T2)
-    augmented_dataset = []
-    
-    '''for i in range(hparams['augmentation_factor']):
-        dataset = CustomDataset_T1w_T2w(images_paths_t1, images_paths_t2, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
-        logging.info(f'Loaded dataset with {len(dataset)} samples')
-        augmented_dataset.extend(dataset)'''
         
-    # Create the datasets
-    datasets = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device) for _ in range(hparams['augmentation_factor'])]
-    dataset = ConcatDataset(datasets)
+    # Create the datasets: Consistig of the original dataset and the augmented datasets
+    unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
+    datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device) for _ in range(hparams['augmentation_factor'])]
+    datasets_with_augmentation.append(unaugmented_dataset)
+    dataset = ConcatDataset(datasets_with_augmentation)
     logging.info(f'Loaded augmented dataset with {len(dataset)} samples')
     #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     
