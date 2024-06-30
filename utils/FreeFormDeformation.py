@@ -92,7 +92,8 @@ def load_png(name):
     import torch
     import sys
     from PIL import Image
-
+    import os
+    
     sys.path.append("/res")
 
     current_dir = os.path.dirname(__file__)
@@ -107,10 +108,10 @@ def load_png(name):
     img = torch.tensor(image_array)
 
     # Extract the red channel to create a grayscale image
-    red_channel = image_array[:, :, 0]  # Only take the red channel
+    #red_channel = image_array[:, :, 0]  # Only take the red channel
 
     # Convert the red channel numpy array to PyTorch tensor
-    img = torch.tensor(red_channel).unsqueeze(0)
+    img = torch.tensor(img).unsqueeze(0)
 
     return img
 
@@ -153,21 +154,40 @@ if __name__ == "__main__":
     import torchvision
     from torchvision import transforms
     from PIL import Image
+    import cv2
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define a transform to normalize the data
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
 
-    #img = load_png("square_dots.png")
-    img = load_mnist(7)
+    img = load_png("new_fixed_image.png")
+    print(img.shape)
+    # transform to black and white
+    if img.shape[3]==4:
+        img = (img[:,:,:,0] + img[:,:,:,1] + img[:,:,:,2] + img[:,:,:,3])/4
+        # normalize
+        img = (img - img.min()) / (img.max() - img.min())
+    #img = load_png(7)
 
     def show(*img):
+        import os
+        sys.path.append("/res")
+
+        current_dir = os.path.dirname(__file__)
+        #image_path_1 = os.path.join(current_dir, '../images/','old_fixed_image.png')
+        image_path_2 = os.path.join(current_dir, '../images/','new_moving_image.png')
+        
         img = [(i.detach().cpu() if isinstance(i, torch.Tensor) else torch.from_numpy(i)) for i in img]
         img = [i / i.max() for i in img]
 
         img = [i.unsqueeze(0) if len(i.shape) == 2 else i for i in img]
         img = [i if len(i.shape) == 3 else i.squeeze(0) for i in img]
+        
+        # save png of the second image in img:
+        #plt.imsave(image_path_1, img[0].squeeze().numpy(), cmap="gray")
+        plt.imsave(image_path_2, img[1].squeeze().numpy(), cmap="gray")
+        
         #print(img)
         np_img = torch.cat(img, dim=-1).numpy()
 
@@ -175,14 +195,28 @@ if __name__ == "__main__":
         print(np_img.shape)
         plt.imshow(np.transpose(np_img, (1, 2, 0)), interpolation="nearest", cmap="gray")
         plt.show()
+        plt.axis("off")
+        
+        
+        
 
-    i = img.unsqueeze(0)
-    shape = i.shape[-2:]
 
-    deform_layer = DeformationLayer(shape)
+    i = img
+    j = img.squeeze(0)
+    print(i.shape)
+    #shape = i.shape[-2:]
+    shape = j.T.shape[-2:]
+    print(shape)
 
+    #deform_layer = DeformationLayer(shape)
+    deform_layer = DeformationLayer(shape, fixed_img_DF=False, random_df_creation_setting=2)
     with torch.no_grad():
         deform_layer.new_deformation(device)
         out = deform_layer.deform(i)
+        
+        # save png of out in the images folder:
+        
+        
+        
         out2 = deform_layer.back_deform(out)
         show(img.squeeze(), out.squeeze(), out2.squeeze(), deform_layer.deform(deform_layer.get_gird()))
