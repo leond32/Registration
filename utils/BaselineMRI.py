@@ -633,7 +633,7 @@ def plot_results(model, best_model_path, data_loader, experiment_dir, device, nu
         outputs = model(images)
     
         # Plot the original and deformed images
-        fig, axes = plt.subplots(11, num_samples, figsize=(48, 35))
+        fig, axes = plt.subplots(12, num_samples, figsize=(48, 38))
         for i in range(num_samples):
 
             ax = axes[0, i] # [0, i]
@@ -681,12 +681,15 @@ def plot_results(model, best_model_path, data_loader, experiment_dir, device, nu
             ax.title.set_text('Redef. Img using GT')
             ax.axis('off')
             
-            edge_detected_moving_image = cv2.Canny(images[i, 1].cpu().numpy().astype(np.uint8), 100, 200)
-            overlayed_image = cv2.addWeighted(images[i, 0].cpu().numpy().astype(np.uint8), 0.7, edge_detected_moving_image, 0.3, 0)
+            edge_detected_moving_image = cv2.Canny(images[i, 1].cpu().numpy().astype(np.uint8), 200, 300)
+            img = cv2.cvtColor(images[i, 0].cpu().numpy().astype(np.uint8), cv2.COLOR_GRAY2BGR)
+            overlayed_img = img.copy()
+            overlayed_img[edge_detected_moving_image > 0] = [255, 0, 0]
+            
             
             ax = axes[8, i]
-            ax.imshow(overlayed_image)
-            ax.title.set_text('Fixed Image with overlayed edges of moving image')
+            ax.imshow(overlayed_img)
+            ax.title.set_text('fixed w/ overlayed edges of moving')
             ax.axis('off')
         
             # not gray cmap
@@ -1279,13 +1282,13 @@ def main():
         logging.info(f'Initialized optimizer with learning rate {hparams["lr"]} and weight decay {hparams["weight_decay"]} and no lr_scheduler')
         
 
-    '''# Train the model
+    # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
     logging.info('Finished training the model')
     
     # create the loss plot from the csv file and save it
     save_loss_plot(experiment_dir)
-    logging.info('Saved the loss plot')'''
+    logging.info('Saved the loss plot')
     
     # calculate metrics on the validation set and save them in a txt file
     evaluate_model_new(model, val_loader, best_model_path, experiment_dir, device)
