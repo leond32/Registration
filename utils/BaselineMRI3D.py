@@ -99,6 +99,12 @@ def resize_3d(image, target_shape):
 def center_crop_3d(image, target_shape):
     d, h, w = image.shape
     td, th, tw = target_shape
+    
+    # The image is already smaller than the target shape
+    # to do: padding if needed
+    if d<=td or h<=th or w<=tw:
+        return image
+    
     d1 = (d - td) // 2
     h1 = (h - th) // 2
     w1 = (w - tw) // 2

@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
     #img = load_png("square_dots.png")
     #img = load_mnist(7)
-    img = load_nii("D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\rawdata_normalized\\sub-0001\\T2w\\sub-0001_T2w.nii.gz")
+    img = load_nii("D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\rawdata_normalized\\sub-0003\\T2w\\sub-0003_T2w.nii.gz")
     print(img.shape)
     def show(*img):
         img = [(i.detach().cpu() if isinstance(i, torch.Tensor) else torch.from_numpy(i)) for i in img]
@@ -188,7 +188,41 @@ if __name__ == "__main__":
         print(np_img.shape)
         plt.imshow(np.transpose(np_img, (1, 2, 0)), interpolation="nearest", cmap="gray")
         plt.show()
-    
+        
+    class IndexTracker(object):
+        def __init__(self, ax, X):
+            self.ax = ax
+            ax.set_title('Use scroll wheel to navigate images')
+
+            self.X = X
+            self.slices, self.rows, self.cols = X.shape
+            self.ind = self.slices // 2
+
+            self.im = ax.imshow(self.X[self.ind, :, :], cmap="gray")
+            self.update()
+
+        def onscroll(self, event):
+            print("%s %s" % (event.button, event.step))
+            if event.button == 'up':
+                self.ind = (self.ind + 1) % self.slices
+            else:
+                self.ind = (self.ind - 1) % self.slices
+            self.update()
+
+        def update(self):
+            self.im.set_data(self.X[self.ind, :, :])
+            self.ax.set_ylabel('slice %s' % self.ind)
+            self.im.axes.figure.canvas.draw()
+
+    def plot3d(image):
+        fig, ax = plt.subplots(1, 1)
+        tracker = IndexTracker(ax, image)
+        fig.canvas.mpl_connect('scroll_event', tracker.onscroll)
+        plt.show()
+
+
+
+        
     def show3d(*images, axis=0, index=0):
         """
         Display slices of multiple 3D images.
@@ -247,4 +281,8 @@ if __name__ == "__main__":
         deform_layer.new_deformation(device)
         out = deform_layer.deform(i)
         out2 = deform_layer.back_deform(out)
-        show3d(img.squeeze(), out.squeeze(), out2.squeeze(), deform_layer.deform(deform_layer.get_gird()).squeeze(), axis=0, index=27)
+        show3d(img.squeeze(), out.squeeze(), out2.squeeze(), deform_layer.deform(deform_layer.get_gird()).squeeze(), axis=0, index=8)
+        # hold the plot
+        plot3d(img.squeeze().numpy())
+        plot3d(out.squeeze().numpy())
+            

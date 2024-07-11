@@ -197,9 +197,6 @@ if __name__ == "__main__":
         plt.show()
         plt.axis("off")
         
-        
-        
-
 
     i = img
     j = img.squeeze(0)

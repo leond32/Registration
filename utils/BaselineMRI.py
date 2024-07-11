@@ -682,7 +682,8 @@ def plot_results(model, best_model_path, data_loader, experiment_dir, device, nu
             ax.axis('off')
             
             edge_detected_moving_image = cv2.Canny(images[i, 1].cpu().numpy().astype(np.uint8), 200, 300)
-            img = cv2.cvtColor(images[i, 0].cpu().numpy().astype(np.uint8), cv2.COLOR_GRAY2BGR)
+            img = ((images[i, 0].cpu().numpy() - np.min(images[i, 0].cpu().numpy())) / (np.max(images[i, 0].cpu().numpy()) - np.min(images[i, 0].cpu().numpy())) * 255)
+            img = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_GRAY2BGR)
             overlayed_img = img.copy()
             overlayed_img[edge_detected_moving_image > 0] = [255, 0, 0]
             
@@ -714,7 +715,6 @@ def plot_results(model, best_model_path, data_loader, experiment_dir, device, nu
         fig.savefig(os.path.join(experiment_dir,"images","results.png"))   # save the figure to file
         plt.close(fig)    # close the figure window
         
-
 ############################################################################################################
 
 def normalize_image(image):
@@ -723,6 +723,15 @@ def normalize_image(image):
     if max - min == 0:
         return image
     return (image - image.min()) / (image.max() - image.min())
+
+############################################################################################################
+
+def ncc(image1, image2):
+    mean1 = np.mean(image1)
+    mean2 = np.mean(image2)
+    numerator = np.sum((image1 - mean1) * (image2 - mean2))
+    denominator = np.sqrt(np.sum((image1 - mean1) ** 2) * np.sum((image2 - mean2) ** 2))
+    return numerator / denominator
 
 ############################################################################################################
 
@@ -745,8 +754,9 @@ def build_box_plot(data, title, x_label, y_label, save_path):
     else:
         total_data_points = len(data)
     
+    epsilon = 1e-8
     # Calculate the percentage of outliers
-    percentage_outliers = (n_outliers / total_data_points) * 100
+    percentage_outliers = (n_outliers / (total_data_points + epsilon)) * 100
     
     # Set plot title and labels
     plt.title(title + f' (Outliers: {percentage_outliers:.2f}%)')
@@ -879,15 +889,11 @@ def compute_metrics_new(model,best_model_path, val_loader, device):
 
         total_images = 0
 
-        for i, images in enumerate(val_loader):
-            # Remove samples with None values
-            valid_indices = [j for j in range(images.size(0)) if images[j] is not None]
-            if not valid_indices:
-                continue
-            images = images[valid_indices]
-            
+        for i, (images, deformation_fields) in enumerate(val_loader):
+        
             # Move validation data to the device
             images = images.float().to(device)
+            deformation_fields = deformation_fields.to(device)
             outputs = model(images)
             batch_size = images.size(0)
             total_images += batch_size
@@ -1160,8 +1166,8 @@ def main():
     
     
     # Define the paths to save the logs and the best model	
-    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/lr_scheduler_vs_none' # Change if you dont train on AFHQ
-    experiment_name = 'Experiment_01_4' # Change this to a different name for each experiment 
+    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/train_with_lr_sched' # Change if you dont train on AFHQ
+    experiment_name = 'Experiment_03_1' # Change this to a different name for each experiment 
     experiment_dir = os.path.join(experiments_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
     log_dir = os.path.join(experiment_dir, 'logs')
@@ -1183,16 +1189,16 @@ def main():
     hparams = {
         'mean': 116.37,
         'std': 78.5,
-        'n_epochs': 50,
+        'n_epochs': 200,
         'batch_size': 32,
-        'lr': 0.0001, #0.001
+        'lr': 0.001, #0.001
         'weight_decay': 1e-5,
         'patience': 30, 
         'alpha': 0,
         'random_df_creation_setting': 2,
         'T_weighting': 2,
-        'image_dimension': (256,256),
-        'augmentation_factor': 5,
+        'image_dimension': (128,128),
+        'augmentation_factor': 10,
         'modality_mixing': False,
         'lr_scheduler': True,
     }
@@ -1239,7 +1245,7 @@ def main():
     
     # Define the model
     model = Unet(
-        dim=8,
+        dim=32,
         init_dim=None,
         out_dim=2,
         dim_mults=(1, 2, 4, 8),
@@ -1275,7 +1281,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=hparams['lr'], weight_decay=hparams['weight_decay'])
     
     if hparams['lr_scheduler']:
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, verbose=True)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=15, verbose=True)
         logging.info(f'Initialized optimizer with learning rate {hparams["lr"]} and weight decay {hparams["weight_decay"]} and plateau lr_scheduler')
     else:
         scheduler = None
