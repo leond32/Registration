@@ -1167,7 +1167,7 @@ def main():
     
     # Define the paths to save the logs and the best model	
     experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments/train_with_lr_sched' # Change if you dont train on AFHQ
-    experiment_name = 'Experiment_03_1' # Change this to a different name for each experiment 
+    experiment_name = 'Experimenttodelete' # Change this to a different name for each experiment 
     experiment_dir = os.path.join(experiments_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
     log_dir = os.path.join(experiment_dir, 'logs')
@@ -1189,7 +1189,7 @@ def main():
     hparams = {
         'mean': 116.37,
         'std': 78.5,
-        'n_epochs': 200,
+        'n_epochs': 1,
         'batch_size': 32,
         'lr': 0.001, #0.001
         'weight_decay': 1e-5,

@@ -28,6 +28,7 @@ def calculate_mean_std_from_batches(data_loader, num_batches=20, device='cpu'):
     mean = 0.0
     std = 0.0
     total_images = 0
+    total_voxels = 0
 
     # Calculate mean
     for i, (images, _) in enumerate(data_loader):
@@ -36,9 +37,10 @@ def calculate_mean_std_from_batches(data_loader, num_batches=20, device='cpu'):
         images = images.to(device).float()
         batch_samples = images.size(0)  # batch size
         total_images += batch_samples
-        mean += images.mean([0, 2, 3, 4]) * batch_samples
+        total_voxels += batch_samples * images.shape[2] * images.shape[3] * images.shape[4]
+        mean += images.sum(dim=[0, 2, 3, 4])
 
-    mean /= total_images
+    mean /= total_voxels
 
     # Calculate standard deviation
     sum_of_squared_diff = 0.0
@@ -47,9 +49,9 @@ def calculate_mean_std_from_batches(data_loader, num_batches=20, device='cpu'):
             break
         images = images.to(device).float()
         batch_samples = images.size(0)
-        sum_of_squared_diff += ((images - mean.view(1, -1, 1, 1, 1).to(device)) ** 2).sum([0, 2, 3, 4])
+        sum_of_squared_diff += ((images - mean.view(1, -1, 1, 1, 1).to(device)) ** 2).sum(dim=[0, 2, 3, 4])
 
-    std = torch.sqrt(sum_of_squared_diff / (total_images * images.shape[2] * images.shape[3] * images.shape[4]))
+    std = torch.sqrt(sum_of_squared_diff / total_voxels)
 
     return mean.tolist(), std.tolist()
 
@@ -82,33 +84,146 @@ def find_file_correspondence(image_paths, id_name, slice_name):
 
 ########################################################################################################################
 
-def plot_images(name):
+def plot_images(data_loader, experiment_dir, num_samples=8, slice_idx=16):
+    # Create a images directory if it doesn't exist
+    if not os.path.exists(os.path.join(experiment_dir, 'images')):
+        os.makedirs(os.path.join(experiment_dir, 'images'))
     
-    #TODO
-    return None
+    images, deformation_fields = next(iter(data_loader))
+        
+    # Move data to the device
+    images = images.float()
+    deformation_fields = deformation_fields
+    
+    fig, axes = plt.subplots(5, num_samples, figsize=(48, 38))
+    
+    # overall title
+    fig.suptitle(f'Image Registration Results of one Batch (Slice: {slice_idx})', fontsize=16)
+    for i in range(num_samples):
+        
+        # Slice of the fixed image
+        ax = axes[0, i]
+        ax.imshow(images[i, 0, slice_idx].cpu().numpy(), cmap='gray')
+        ax.title.set_text('Fixed Image')
+        ax.axis('off')
+        
+        # Slice of the moving image
+        ax = axes[1, i]
+        ax.imshow(images[i, 1, slice_idx].cpu().numpy(), cmap='gray')
+        ax.title.set_text('Moving Image')
+        ax.axis('off')
+        
+        # GT displacement field of that slide (x-component)
+        ax = axes[2, i]
+        ax.imshow(deformation_fields[i, 0, slice_idx].cpu().numpy(), cmap='gray')
+        ax.title.set_text('GT Displacement Field (x)')
+        ax.axis('off')
+        
+        # GT displacement field of that slide (y-component)
+        ax = axes[3, i]
+        ax.imshow(deformation_fields[i, 1, slice_idx].cpu().numpy(), cmap='gray')
+        ax.title.set_text('GT Displacement Field (y)')
+        ax.axis('off')
+        
+        # GT displacement field of that slide (z-component)
+        ax = axes[4, i]
+        ax.imshow(deformation_fields[i, 2, slice_idx].cpu().numpy(), cmap='gray')
+        ax.title.set_text('GT Displacement Field (z)')
+        ax.axis('off')
+        
+    plt.tight_layout()
+    fig.savefig(os.path.join(experiment_dir,"images","fixed_moving_DF.png"))   # save the figure to file
+    plt.close(fig)    # close the figure window
+        
 
 ########################################################################################################################
 
 def resize_3d(image, target_shape):
     image = image.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
-    resized_image = F.interpolate(image, size=target_shape, mode='trilinear', align_corners=False)
+    resized_image = t.interpolate(image, size=target_shape, mode='trilinear', align_corners=False)
     return resized_image.squeeze(0).squeeze(0)  # Remove batch and channel dimensions
 
 ########################################################################################################################
 
-def center_crop_3d(image, target_shape):
+# Global flag to control printing
+printed = False
+
+def center_crop_3d(image, target_shape, print_once=False):
+    global printed
     d, h, w = image.shape
     td, th, tw = target_shape
     
-    # The image is already smaller than the target shape
-    # to do: padding if needed
-    if d<=td or h<=th or w<=tw:
-        return image
+    # Convert the torch tensor to a numpy array for padding
+    image_np = image.numpy()
     
-    d1 = (d - td) // 2
-    h1 = (h - th) // 2
-    w1 = (w - tw) // 2
-    return image[d1:d1+td, h1:h1+th, w1:w1+tw]
+    if d < td or h < th or w < tw:
+        # Calculate padding if image is smaller than target shape
+        d_pad = max((td - d) // 2, 0)
+        h_pad = max((th - h) // 2, 0)
+        w_pad = max((tw - w) // 2, 0)
+        
+        # Pad the numpy array
+        image_np = np.pad(image_np, ((d_pad, d_pad), (h_pad, h_pad), (w_pad, w_pad)), mode='reflect')
+        
+        if print_once and not printed:
+            print(f"Shape after padding: {image_np.shape}")
+
+    # Convert back to torch tensor
+    image = torch.tensor(image_np)
+    
+    # Calculate the cropping indices
+    d1 = max((image.shape[0] - td) // 2, 0)
+    h1 = max((image.shape[1] - th) // 2, 0)
+    w1 = max((image.shape[2] - tw) // 2, 0)
+
+    cropped_image = image[d1:d1+td, h1:h1+th, w1:w1+tw]
+    cropped_image = resize_3d(cropped_image, target_shape)
+    
+    if print_once and not printed:
+        print(f"Shape before cropping: {image.shape}")
+        print(f"Crop indices (d1, h1, w1): ({d1}, {h1}, {w1})")
+        print(f"Shape after cropping: {cropped_image.shape}")
+        printed = True
+    
+    return cropped_image
+
+########################################################################################################################
+
+def random_crop_3d(image1, image2, target_shape, print_once=False):
+    device = image1.device
+    image1 = image1.cpu().numpy()  # Ensure the image is on the CPU for numpy operations
+    image2 = image2.cpu().numpy()
+
+    d, h, w = image1.shape
+    td, th, tw = target_shape
+    
+    if d < td or h < th or w < tw:
+        # Calculate padding if image is smaller than target shape
+        d_pad = max((td - d) // 2, 0)
+        h_pad = max((th - h) // 2, 0)
+        w_pad = max((tw - w) // 2, 0)
+        
+        # Pad the numpy array
+        image1 = np.pad(image1, ((d_pad, d_pad), (h_pad, h_pad), (w_pad, w_pad)), mode='reflect')
+        image2 = np.pad(image2, ((d_pad, d_pad), (h_pad, h_pad), (w_pad, w_pad)), mode='reflect')
+        
+
+    # Convert back to torch tensor on CPU
+    image1 = torch.tensor(image1)
+    image2 = torch.tensor(image2)
+
+    # Calculate the random cropping indices
+    d1 = np.random.randint(0, max(image1.shape[0] - td, 1))
+    h1 = np.random.randint(0, max(image1.shape[1] - th, 1))
+    w1 = np.random.randint(0, max(image1.shape[2] - tw, 1))
+
+    cropped_image1 = image1[d1:d1+td, h1:h1+th, w1:w1+tw]
+    cropped_image1 = resize_3d(cropped_image1, target_shape)
+    
+    cropped_image2 = image2[d1:d1+td, h1:h1+th, w1:w1+tw]
+    cropped_image2 = resize_3d(cropped_image2, target_shape)
+    
+    return cropped_image1.to(device), cropped_image2.to(device)  # Move back to the original device
 
 ########################################################################################################################
 class CustomDataset_T1w_T2w(Dataset):
@@ -131,6 +246,7 @@ class CustomDataset_T1w_T2w(Dataset):
         self.modality_mixing = hparams['modality_mixing']
         self.T_weighting = hparams['T_weighting']
         self.dataset_augmentation = dataset_augmentation
+        self.img_scaling_factor = hparams['img_scaling_factor']
     
     def __len__(self):
         return len(self.image_paths_T1)
@@ -170,16 +286,23 @@ class CustomDataset_T1w_T2w(Dataset):
 
         fixed_img = torch.tensor(np.load(fixed_image_path)).float()
         moving_img = torch.tensor(np.load(moving_image_path)).float()
+        
+        fixed_img = resize_3d(fixed_img, tuple(int(dim * self.img_scaling_factor) for dim in fixed_img.shape))
 
-        fixed_img = resize_3d(fixed_img, self.image_dimension)
-        moving_img = resize_3d(moving_img, self.image_dimension)
-        fixed_img = center_crop_3d(fixed_img, self.image_dimension)
-        moving_img = center_crop_3d(moving_img, self.image_dimension)
+        moving_img = resize_3d(moving_img, fixed_img.shape)
+        fixed_img, moving_img = random_crop_3d(fixed_img, moving_img, self.image_dimension)
+        #moving_img = random_crop_3d(moving_img, self.image_dimension, print_once=True)
+        #fixed_img = random_crop_3d(fixed_img, self.image_dimension)
+
+        #fixed_img = resize_3d(fixed_img, self.image_dimension)
+        #moving_img = resize_3d(moving_img, self.image_dimension)
+        #fixed_img = center_crop_3d(fixed_img, self.image_dimension)
+        #moving_img = center_crop_3d(moving_img, self.image_dimension)
         
         shape = fixed_img.squeeze(0).T.shape
 
-        original_image = fixed_img.to(self.device)
-        to_deform_image = moving_img.to(self.device)
+        original_image = fixed_img.unsqueeze(0).to(self.device)
+        to_deform_image = moving_img.unsqueeze(0).to(self.device)
 
         if self.dataset_augmentation:
             deformation_layer_01 = self.build_deformation_layer(shape, self.device, fixed_img_DF=True).to(self.device)
@@ -196,6 +319,10 @@ class CustomDataset_T1w_T2w(Dataset):
 
         stacked_image = torch.cat([original_image, deformed_image], dim=0)
 
+        '''if idx == 0:
+            print('shape of stacked image: ', stacked_image.shape)
+            print('shape of deformation field: ', deformation_field.shape)'''
+            
         return stacked_image, deformation_field
     
 ########################################################################################################################
@@ -237,6 +364,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
         start_epoch = checkpoint['epoch']
         logging.info(f'Resuming training from epoch {start_epoch}')
 
+    
     for epoch in range(n_epochs):
         model.train()
         train_loss = 0
@@ -320,20 +448,145 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, n_epochs,
             print('Early stopping...')
             logging.info('Early stopping...')
             return
-            
+        
+        torch.cuda.empty_cache()  
+          
     logging.info('Training completed successfully')
     print('Training completed successfully')
     
 ########################################################################################################################
     
+def train_model_mixed_precision(model, train_loader, val_loader, criterion, optimizer, n_epochs, scheduler, device, log_dir='afhq_logs', patience=5, alpha=0.05):
+    logging.info(f'Started training the model for {n_epochs} epochs...')
+    # Create directories if they don't exist
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Initialize lists to hold the loss values
+    train_losses = []
+    val_losses = []
+
+    # Open CSV file for logging
+    csv_path = os.path.join(log_dir, 'losses.csv')
+    with open(csv_path, 'w') as f:
+        f.write('epoch,train_loss,val_loss\n')
+
+    best_val_loss = float('inf')
+    best_epoch = 0
+    epochs_without_improvement = 0
+    
+    start_epoch = 0
+    checkpoint_path = os.path.join(log_dir, 'checkpoint.pth')
+    
+    if os.path.isfile(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        if scheduler and 'scheduler_state_dict' in checkpoint:
+            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        start_epoch = checkpoint['epoch']
+        logging.info(f'Resuming training from epoch {start_epoch}')
+
+    # Initialize GradScaler for mixed precision training
+    scaler = GradScaler()
+
+    for epoch in range(start_epoch, n_epochs):
+        model.train()
+        train_loss = 0
+        
+        for i, (images, deformation_field) in enumerate(train_loader):
+            images = images.float().to(device)
+            deformation_field = deformation_field.to(device)
+            
+            optimizer.zero_grad()
+            with autocast():
+                outputs = model(images)
+                loss = criterion(outputs, deformation_field)
+                train_loss += loss.item()
+                
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+                
+        avg_train_loss = train_loss / len(train_loader)
+        logging.info(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.8f}')
+        train_losses.append(avg_train_loss)
+        
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for i, (images, deformation_field) in enumerate(val_loader):
+                images = images.float().to(device)
+                deformation_field = deformation_field.to(device)
+                
+                with autocast():
+                    outputs = model(images)
+                    batch_loss = criterion(outputs, deformation_field)
+                    val_loss += batch_loss.item()
+                
+        avg_val_loss = val_loss / len(val_loader)
+        logging.info(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.8f}')
+        val_losses.append(avg_val_loss)
+
+        # Print training and validation losses to console
+        print(f'Training Loss (Epoch {epoch+1}/{n_epochs}): {avg_train_loss:.8f}')
+        print(f'Validation Loss (Epoch {epoch+1}/{n_epochs}): {avg_val_loss:.8f}')  
+        sys.stdout.flush()   
+                
+        # Log the losses to a CSV file
+        with open(csv_path, 'a') as f:
+            f.write(f'{epoch+1},{avg_train_loss},{avg_val_loss}\n')
+        
+        # Save model if validation loss has improved
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            best_epoch = epoch + 1
+            torch.save(model.state_dict(), os.path.join(log_dir, 'best_model.pth'))
+            logging.info(f'Model saved at epoch {epoch+1} with validation loss {avg_val_loss:.8f}')
+            print(f'Model saved at epoch {epoch+1} with validation loss {avg_val_loss:.8f}')
+            epochs_without_improvement = 0
+        else:
+            logging.info(f'No improvement in validation loss since epoch {best_epoch}')
+            print(f'No improvement in validation loss since epoch {best_epoch}')
+            epochs_without_improvement += 1
+            
+        # Save checkpoint after each epoch
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
+        }, checkpoint_path)
+        
+        logging.info(f'Checkpoint saved at epoch {epoch+1}')
+        
+        # Update learning rate if scheduler is enabled
+        if scheduler is not None:
+            # Log learning rate before the scheduler step
+            prev_lr = get_lr(optimizer)
+            scheduler.step(avg_val_loss)
+            # Log learning rate after the scheduler step
+            new_lr = get_lr(optimizer)
+            if new_lr != prev_lr:
+                logging.info(f'Learning rate changed from {prev_lr} to {new_lr} at epoch {epoch+1}')
+                print(f'Learning rate changed from {prev_lr} to {new_lr} at epoch {epoch+1}')
+        
+        # Check for early stopping
+        if epochs_without_improvement >= patience:
+            print('Early stopping...')
+            logging.info('Early stopping...')
+            return
+        
+        torch.cuda.empty_cache()  
+
+########################################################################################################################
 def get_image_paths(root_dir): 
-    # to do
     image_paths = []
     for subject in os.listdir(root_dir):
         subject_dir = os.path.join(root_dir, subject)
         if os.path.isdir(subject_dir) and os.listdir(subject_dir) != []:
             for filename in os.listdir(subject_dir):
-                if filename.endswith(".p"):
+                if filename.endswith(".npy"):
                     image_paths.append(os.path.join(subject_dir, filename))   
     return image_paths
 
@@ -374,7 +627,7 @@ def deform_image_3d(deformed_image: torch.Tensor, displacement_field: torch.Tens
 
     # Interpolate original image using the new grid
     deformed_image = deformed_image.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, D, H, W)
-    deformed_image = F.grid_sample(deformed_image, new_grid, mode='bilinear', padding_mode='border')
+    deformed_image = t.grid_sample(deformed_image, new_grid, mode='bilinear', padding_mode='border')
     return deformed_image.squeeze(0).squeeze(0)  
 
 ########################################################################################################################
@@ -433,12 +686,7 @@ def compute_metrics(model, best_model_path, val_loader, device):
 
         total_images = 0
 
-        for i, images in enumerate(val_loader):
-            # Remove samples with None values
-            valid_indices = [j for j in range(images.size(0)) if images[j] is not None]
-            if not valid_indices:
-                continue
-            images = images[valid_indices]
+        for i, (images, _) in enumerate(val_loader):
             
             # Move validation data to the device
             images = images.float().to(device)
@@ -619,6 +867,7 @@ def build_box_plot(data, title, x_label, y_label, save_path):
     plt.close()
     
 ############################################################################################################
+
 def save_loss_plot(experiment_dir):
     
     # Create a images directory if it doesn't exist
@@ -636,6 +885,96 @@ def save_loss_plot(experiment_dir):
     plt.savefig(os.path.join(experiment_dir, 'images', 'loss_plot.png'))
     plt.close()
     
+############################################################################################################
+
+def plot_image_results(model, best_model_path, data_loader, experiment_dir, device, num_samples=10, slice_idx=8):
+    # Create a images directory if it doesn't exist
+    if not os.path.exists(os.path.join(experiment_dir, 'images')):
+        os.makedirs(os.path.join(experiment_dir, 'images'))
+        
+    # Load the best weights
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
+    model.eval()
+    with torch.no_grad():
+        images, deformation_fields = next(iter(data_loader))
+        
+        # Move data to the device
+        images = images.float().to(device)
+        deformation_fields = deformation_fields.to(device)
+        outputs = model(images)
+        
+        fig, axes = plt.subplots(10, num_samples, figsize=(48, 38))
+        
+        # overall title
+        fig.suptitle(f'Image Registration Results of one Batch (Slice: {slice_idx})', fontsize=16)
+        for i in range(num_samples):
+            # Slice of the fixed image
+            ax = axes[0, i]
+            ax.imshow(images[i, 0, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('Fixed Image')
+            ax.axis('off')
+            
+            # Slice of the moving image
+            ax = axes[1, i]
+            ax.imshow(images[i, 1, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('Moving Image')
+            ax.axis('off')
+            
+            # GT displacement field of that slide (x-component)
+            ax = axes[2, i]
+            ax.imshow(deformation_fields[i, 0, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('GT Displacement Field (x)')
+            ax.axis('off')
+            
+            # GT displacement field of that slide (y-component)
+            ax = axes[3, i]
+            ax.imshow(deformation_fields[i, 1, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('GT Displacement Field (y)')
+            ax.axis('off')
+            
+            # GT displacement field of that slide (z-component)
+            ax = axes[4, i]
+            ax.imshow(deformation_fields[i, 2, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('GT Displacement Field (z)')
+            ax.axis('off')
+            
+            # Predicted displacement field of that slide (x-component)
+            ax = axes[5, i]
+            ax.imshow(outputs[i, 0, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('Predicted Displacement Field (x)')
+            ax.axis('off')
+            
+            # Predicted displacement field of that slide (y-component)
+            ax = axes[6, i]
+            ax.imshow(outputs[i, 1, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('Predicted Displacement Field (y)')
+            ax.axis('off')
+            
+            # Predicted displacement field of that slide (z-component)
+            ax = axes[7, i]
+            ax.imshow(outputs[i, 2, slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('Predicted Displacement Field (z)')
+            ax.axis('off')
+            
+            inverse_transformed_image = deform_image_3d(images[i, 1], outputs[i], device)
+            inverse_transformed_image_gt = deform_image_3d(images[i, 1], deformation_fields[i], device)
+            
+            # Redeformed moving image
+            ax = axes[8, i]
+            ax.imshow(inverse_transformed_image[slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('Redeformed Moving Image')
+            ax.axis('off')
+            
+            # Redeformed moving image (GT)
+            ax = axes[9, i]
+            ax.imshow(inverse_transformed_image_gt[slice_idx].cpu().numpy(), cmap='gray')
+            ax.title.set_text('Redeformed Moving Image (GT)')
+            ax.axis('off')
+    
+    plt.tight_layout()
+    fig.savefig(os.path.join(experiment_dir,"images","results.png"))   # save the figure to file
+    plt.close(fig)    # close the figure window        
+            
 ############################################################################################################
 
 def evaluate_model(model, val_loader, best_model_path, experiment_dir, device):
@@ -705,12 +1044,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the paths to the training and validation data
-    data_path_T1 = None # TO DO add path to T1w images
-    data_path_T2 = None # TO DO add path to T2w images
-    
+    data_path_T1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack/T1w' 
+    data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack/T2w'
     # Define the paths to save the logs and the best model	
-    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments_3D/first_testing' # Change if you dont train on AFHQ
-    experiment_name = 'Experiment_01' # Change this to a different name for each experiment 
+    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments_3D/first_testing' 
+    experiment_name = 'Experiment_16' # Change this to a different name for each experiment 
     experiment_dir = os.path.join(experiments_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
     log_dir = os.path.join(experiment_dir, 'logs')
@@ -730,20 +1068,21 @@ def main():
     # Define the hyperparameters for dataset creation and training
 
     hparams = {
-        'mean': 116.37,
-        'std': 78.5,
-        'n_epochs': 200,
-        'batch_size': 32,
+        'mean': 0.35,
+        'std': 0.28,
+        'n_epochs': 100,
+        'batch_size': 4,
         'lr': 0.001, #0.001
         'weight_decay': 1e-5,
-        'patience': 30, 
+        'patience': 20, 
         'alpha': 0,
         'random_df_creation_setting': 2,
         'T_weighting': 2,
-        'image_dimension': (30,128,128),
+        'image_dimension': (40,128,128),
         'augmentation_factor': 10,
         'modality_mixing': False,
         'lr_scheduler': True,
+        'img_scaling_factor': 1,
     }
     logging.info(f'Loaded hyperparameters: {hparams}')
     
@@ -760,8 +1099,13 @@ def main():
     # Create the datasets: Consistig of the original dataset and the augmented datasets
     unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
     datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device) for _ in range(hparams['augmentation_factor']-1)]
+    #unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=None, device=device)
+    #datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=None, device=device) for _ in range(hparams['augmentation_factor']-1)]
     datasets_with_augmentation.append(unaugmented_dataset)
     dataset = ConcatDataset(datasets_with_augmentation)
+    #print('Shape of stacked image in DS',dataset[0][0].shape)
+    #print('Shape of deformation field in DS',dataset[0][1].shape)
+    
     logging.info(f'Loaded augmented dataset with {len(dataset)} samples')
     #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     
@@ -776,28 +1120,27 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=hparams['batch_size'], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=hparams['batch_size'], shuffle=True)
     
-    plot_images(train_loader, experiment_dir, num_samples=16)
+    plot_images(train_loader, experiment_dir, num_samples=4, slice_idx = int(hparams['image_dimension'][0]/2))
     
-    '''mean, std = calculate_mean_std_from_batches(train_loader, num_batches=500, device=device)
+    
+    mean, std = calculate_mean_std_from_batches(train_loader, num_batches=5, device=device)
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
         f.write(f'mean: {mean}\n')
         f.write(f'std: {std}\n')
     print('mean: ', mean)
     print('std: ',std)
-    logging.info(f'Mean: {mean}, and std {std}')'''
+    logging.info(f'Mean: {mean}, and std {std}')
     
     # Define the model
     model = Unet(
-        dim=32,
+        dim=64,
         init_dim=None,
-        out_dim=hparams['image_dimension'][0],
+        out_dim= 3, 
         dim_mults=(1, 2, 4, 8),
-        channels=hparams['image_dimension'][0],
+        channels= 2,
         resnet_block_groups=8,
         learned_variance=False,
         conditional_dimensions=0,
-        patch_size=1,
-        attention_layer=None
     )
     logging.info(f'Loaded model with {sum(p.numel() for p in model.parameters())} parameters')
         
@@ -824,7 +1167,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=hparams['lr'], weight_decay=hparams['weight_decay'])
     
     if hparams['lr_scheduler']:
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=15, verbose=True)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, verbose=True)
         logging.info(f'Initialized optimizer with learning rate {hparams["lr"]} and weight decay {hparams["weight_decay"]} and plateau lr_scheduler')
     else:
         scheduler = None
@@ -832,7 +1175,8 @@ def main():
         
 
     # Train the model
-    train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
+    #train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
+    train_model_mixed_precision(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
     logging.info('Finished training the model')
     
     # create the loss plot from the csv file and save it
@@ -844,10 +1188,8 @@ def main():
     logging.info('Saved the metrics')
     
     # plot results
-    #plot_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=16)
+    plot_image_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=4)
     logging.info('Saved image of some results')
-    
-    
     
 if __name__ == "__main__":
     main()

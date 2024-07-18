@@ -41,7 +41,7 @@ class DeformationLayer(nn.Module):
 
     def new_deformation(self, device):
         shape = self.field.data_shape
-        print(shape)
+        #print(shape)
         s = (next8(shape[-3]), next8(shape[-2]), next8(shape[-1]))
 
         noise_3d = []
@@ -84,6 +84,7 @@ class DeformationLayer(nn.Module):
     def deform(self, i: torch.Tensor):
         if len(i) == 4:
             i = i.unsqueeze(0)
+    
         return self.transformer.forward(i)
     
 
@@ -157,6 +158,9 @@ def load_nii(path_to_nifty):
 
     return t_tensor
 
+def load_numpy(path_to_npy):
+    return torch.Tensor(np.load(path_to_npy))
+
 if __name__ == "__main__":
     import sys
     import matplotlib.pyplot as plt
@@ -173,22 +177,10 @@ if __name__ == "__main__":
 
     #img = load_png("square_dots.png")
     #img = load_mnist(7)
-    img = load_nii("D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\rawdata_normalized\\sub-0003\\T2w\\sub-0003_T2w.nii.gz")
-    print(img.shape)
-    def show(*img):
-        img = [(i.detach().cpu() if isinstance(i, torch.Tensor) else torch.from_numpy(i)) for i in img]
-        img = [i / i.max() for i in img]
-
-        img = [i.unsqueeze(0) if len(i.shape) == 3 else i for i in img]
-        img = [i if len(i.shape) == 4 else i.squeeze(0) for i in img]
-        #print(img)
-        np_img = torch.cat(img, dim=-1).numpy()
-
-        plt.figure(figsize=(20, 6))
-        print(np_img.shape)
-        plt.imshow(np.transpose(np_img, (1, 2, 0)), interpolation="nearest", cmap="gray")
-        plt.show()
-        
+    img = load_numpy("D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\Registration\\images\\sub-0018.npy")
+    img = img.permute(2,0,1)
+    print('image shape: ',img.shape)
+   
     class IndexTracker(object):
         def __init__(self, ax, X):
             self.ax = ax
@@ -281,8 +273,9 @@ if __name__ == "__main__":
         deform_layer.new_deformation(device)
         out = deform_layer.deform(i)
         out2 = deform_layer.back_deform(out)
-        show3d(img.squeeze(), out.squeeze(), out2.squeeze(), deform_layer.deform(deform_layer.get_gird()).squeeze(), axis=0, index=8)
+        #show3d(img.squeeze(), out.squeeze(), out2.squeeze(), deform_layer.deform(deform_layer.get_gird()).squeeze(), axis=0, index=60)
         # hold the plot
-        plot3d(img.squeeze().numpy())
-        plot3d(out.squeeze().numpy())
-            
+        #plot3d(img.squeeze().numpy())
+        #plot3d(out.squeeze().numpy())
+        plot3d(deform_layer.deform(deform_layer.get_gird()).squeeze().numpy())
+ 
