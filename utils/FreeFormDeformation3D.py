@@ -177,8 +177,8 @@ if __name__ == "__main__":
 
     #img = load_png("square_dots.png")
     #img = load_mnist(7)
-    img = load_numpy("D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\Registration\\images\\sub-0018.npy")
-    img = img.permute(2,0,1)
+    img = load_numpy("D:\\Dokumente\\03_RCI\\practical\\Folder_structure\\Registration\\images\\sub-0010_T2w.nii.npy")
+    #img = img.permute(2,0,1)
     print('image shape: ',img.shape)
    
     class IndexTracker(object):
@@ -277,5 +277,5 @@ if __name__ == "__main__":
         # hold the plot
         #plot3d(img.squeeze().numpy())
         #plot3d(out.squeeze().numpy())
-        plot3d(deform_layer.deform(deform_layer.get_gird()).squeeze().numpy())
+        plot3d(out.squeeze().numpy())
  
