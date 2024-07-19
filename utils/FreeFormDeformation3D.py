@@ -56,9 +56,9 @@ class DeformationLayer(nn.Module):
             random_scale_02 = x
             random_scale_03 = x
         if self.random_df_creation_setting == 2:
-            random_scale_01 = np.random.uniform(0, 3)
-            random_scale_02 = np.random.uniform(0, 1.5)
-            random_scale_03 = np.random.uniform(0, 1)
+            random_scale_01 = np.random.uniform(0, 4)
+            random_scale_02 = np.random.uniform(0, 2)
+            random_scale_03 = np.random.uniform(0, 1.5)
         
         if self.fixed_img_DF:
             # If fixed_img_DF is True, create a small deformation that is applied to the fixed and moving image (used for data augmentation)

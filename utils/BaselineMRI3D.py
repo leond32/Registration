@@ -1044,8 +1044,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the paths to the training and validation data
-    data_path_T1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack/T1w' 
-    data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack/T2w'
+    data_path_T1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-mask/T1w' 
+    data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-mask/T2w'
     # Define the paths to save the logs and the best model	
     experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments_3D/first_testing' 
     experiment_name = 'Experiment_16' # Change this to a different name for each experiment 
@@ -1068,17 +1068,15 @@ def main():
     # Define the hyperparameters for dataset creation and training
 
     hparams = {
-        'mean': 0.35,
-        'std': 0.28,
         'n_epochs': 100,
-        'batch_size': 4,
+        'batch_size': 8,
         'lr': 0.001, #0.001
         'weight_decay': 1e-5,
         'patience': 20, 
         'alpha': 0,
         'random_df_creation_setting': 2,
         'T_weighting': 2,
-        'image_dimension': (40,128,128),
+        'image_dimension': (40,80,80),
         'augmentation_factor': 10,
         'modality_mixing': False,
         'lr_scheduler': True,
@@ -1095,19 +1093,24 @@ def main():
     # Get the image paths of the T1w and T2w MRI-Images for dynamic dataset creation    
     image_paths_T1 = get_image_paths(data_path_T1)
     image_paths_T2 = get_image_paths(data_path_T2)
+    
+    # Create unnormalized dataset for mean and std calculation
+    dataset_unnormalized = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=None, device=device)
+    data_loader_unnormalized = DataLoader(dataset_unnormalized, batch_size=32, shuffle=True)
+    mean, std = calculate_mean_std_from_batches(data_loader_unnormalized, num_batches=len(data_loader_unnormalized), device=device)
+    with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
+        f.write(f'Initial mean: {mean}\n')
+        f.write(f'Initial std: {std}\n')
+    logging.info(f'Initial Mean: {mean}, and std {std}')
         
     # Create the datasets: Consistig of the original dataset and the augmented datasets
-    unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
-    datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device) for _ in range(hparams['augmentation_factor']-1)]
-    #unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=None, device=device)
-    #datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=None, device=device) for _ in range(hparams['augmentation_factor']-1)]
+    unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean, std)]), device=device)
+    datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=transforms.Compose([transforms.Normalize(mean, std)]), device=device) for _ in range(hparams['augmentation_factor']-1)]
+
     datasets_with_augmentation.append(unaugmented_dataset)
     dataset = ConcatDataset(datasets_with_augmentation)
-    #print('Shape of stacked image in DS',dataset[0][0].shape)
-    #print('Shape of deformation field in DS',dataset[0][1].shape)
     
     logging.info(f'Loaded augmented dataset with {len(dataset)} samples')
-    #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     
     # random split of Dataset
     train_size = int(0.8 * len(dataset))
@@ -1125,11 +1128,9 @@ def main():
     
     mean, std = calculate_mean_std_from_batches(train_loader, num_batches=5, device=device)
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
-        f.write(f'mean: {mean}\n')
-        f.write(f'std: {std}\n')
-    print('mean: ', mean)
-    print('std: ',std)
-    logging.info(f'Mean: {mean}, and std {std}')
+        f.write(f'mean after normalizing: {mean}\n')
+        f.write(f'std after normalizing: {std}\n')
+    logging.info(f'Mean after normalizing: {mean}, and std after normalizing{std}')
     
     # Define the model
     model = Unet(
