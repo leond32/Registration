@@ -286,14 +286,14 @@ class CustomDataset_T1w_T2w(Dataset):
 
         fixed_img = torch.tensor(np.load(fixed_image_path)).float()
         moving_img = torch.tensor(np.load(moving_image_path)).float()
-        
+        if idx == 5:
+            print(fixed_img.shape)
         fixed_img = resize_3d(fixed_img, tuple(int(dim * self.img_scaling_factor) for dim in fixed_img.shape))
 
         moving_img = resize_3d(moving_img, fixed_img.shape)
         fixed_img, moving_img = random_crop_3d(fixed_img, moving_img, self.image_dimension)
         #moving_img = random_crop_3d(moving_img, self.image_dimension, print_once=True)
         #fixed_img = random_crop_3d(fixed_img, self.image_dimension)
-
         #fixed_img = resize_3d(fixed_img, self.image_dimension)
         #moving_img = resize_3d(moving_img, self.image_dimension)
         #fixed_img = center_crop_3d(fixed_img, self.image_dimension)
@@ -868,6 +868,54 @@ def build_box_plot(data, title, x_label, y_label, save_path):
     
 ############################################################################################################
 
+def build_boxplot_before_after(data_before, data_after, title, x_label, y_label, save_path):
+    
+    # Create the box plot
+    box_dict = plt.boxplot(data_before + data_after)
+    
+    # Collect all data before outliers
+    all_outliers_before = []
+    for flier in box_dict['fliers'][:len(data_before)]:
+        all_outliers_before.extend(flier.get_ydata())
+    
+    n_outliers_before = len(all_outliers_before)
+    
+    # Calculate the total number of data points before
+    if isinstance(data_before[0], list):
+        total_data_points_before = sum(len(d) for d in data_before)
+    else:
+        total_data_points_before = len(data_before)
+        
+    # Calculate the percentage of outliers before
+    epsilon = 1e-8
+    percentage_outliers_before = (n_outliers_before / (total_data_points_before + epsilon)) * 100
+    
+    # Collect all data after outliers
+    all_outliers_after = []
+    for flier in box_dict['fliers'][len(data_before):]:
+        all_outliers_after.extend(flier.get_ydata())
+    
+    n_outliers_after = len(all_outliers_after)
+    
+    # Calculate the total number of data points after
+    if isinstance(data_after[0], list):
+        total_data_points_after = sum(len(d) for d in data_after)
+    else:
+        total_data_points_after = len(data_after)
+    
+    # Calculate the percentage of outliers after
+    percentage_outliers_after = (n_outliers_after / (total_data_points_after + epsilon)) * 100
+    
+    # Set plot title and labels
+    plt.title(title + f' (Outliers Before: {percentage_outliers_before:.2f}%, Outliers After: {percentage_outliers_after:.2f}%)')
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    
+    # Save the plot
+    plt.savefig(save_path)
+
+############################################################################################################
+
 def save_loss_plot(experiment_dir):
     
     # Create a images directory if it doesn't exist
@@ -1008,24 +1056,19 @@ def evaluate_model(model, val_loader, best_model_path, experiment_dir, device):
     # Boxplot of SSIM, PSNR, MSE, L1
     
     # Boxplot of SSIM
-    build_box_plot([metrics_values_after['SSIM']], 'SSIM', 'SSIM', 'Values', os.path.join(experiment_dir, 'images', 'ssim_after_boxplot.png'))
-    build_box_plot([metrics_values_before['SSIM']], 'SSIM', 'SSIM', 'Values', os.path.join(experiment_dir, 'images', 'ssim_before_boxplot.png'))
+    build_boxplot_before_after([metrics_values_before['SSIM'], metrics_values_after['SSIM']], 'SSIM', 'SSIM', 'Values', os.path.join(experiment_dir, 'images', 'ssim_boxplot.png'))
     
     # Boxplot of PSNR
-    build_box_plot([metrics_values_after['PSNR']], 'PSNR', 'PSNR', 'Values', os.path.join(experiment_dir, 'images', 'psnr_after_boxplot.png'))
-    build_box_plot([metrics_values_before['PSNR']], 'PSNR', 'PSNR', 'Values', os.path.join(experiment_dir, 'images', 'psnr_before_boxplot.png'))
+    build_boxplot_before_after([metrics_values_before['PSNR'], metrics_values_after['PSNR']], 'PSNR', 'PSNR', 'Values', os.path.join(experiment_dir, 'images', 'psnr_boxplot.png'))
     
     # Boxplot of MSE
-    build_box_plot([metrics_values_after['MSE']], 'MSE', 'MSE', 'Values', os.path.join(experiment_dir, 'images', 'mse_after_boxplot.png'))
-    build_box_plot([metrics_values_before['MSE']], 'MSE', 'MSE', 'Values', os.path.join(experiment_dir, 'images', 'mse_before_boxplot.png'))
+    build_boxplot_before_after([metrics_values_before['MSE'], metrics_values_after['MSE']], 'MSE', 'MSE', 'Values', os.path.join(experiment_dir, 'images', 'mse_boxplot.png'))
     
     # Boxplot of L1
-    build_box_plot([metrics_values_after['L1']], 'L1', 'L1', 'Values', os.path.join(experiment_dir, 'images', 'l1_after_boxplot.png'))
-    build_box_plot([metrics_values_before['L1']], 'L1', 'L1', 'Values', os.path.join(experiment_dir, 'images', 'l1_before_boxplot.png'))
+    build_boxplot_before_after([metrics_values_before['L1'], metrics_values_after['L1']], 'L1', 'L1', 'Values', os.path.join(experiment_dir, 'images', 'l1_boxplot.png'))
     
     # Boxplot of NCC
-    build_box_plot([metrics_values_after['NCC']], 'NCC', 'NCC', 'Values', os.path.join(experiment_dir, 'images', 'ncc_after_boxplot.png'))
-    build_box_plot([metrics_values_before['NCC']], 'NCC', 'NCC', 'Values', os.path.join(experiment_dir, 'images', 'ncc_before_boxplot.png'))
+    build_boxplot_before_after([metrics_values_before['NCC'], metrics_values_after['NCC']], 'NCC', 'NCC', 'Values', os.path.join(experiment_dir, 'images', 'ncc_boxplot.png'))
     
     # Save metrics in a csv file
     csv_path = os.path.join(experiment_dir, 'metrics', 'metrics.csv')
@@ -1044,11 +1087,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the paths to the training and validation data
-    data_path_T1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-mask/T1w' 
-    data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-mask/T2w'
+    data_path_T1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-70/T1w' 
+    data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-70/T2w'
     # Define the paths to save the logs and the best model	
     experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments_3D/first_testing' 
-    experiment_name = 'Experiment_16' # Change this to a different name for each experiment 
+    experiment_name = 'Experiment_17_normalized_voxel_lower_resolution' # Change this to a different name for each experiment 
     experiment_dir = os.path.join(experiments_dir, experiment_name)
     best_model_path = os.path.join(experiment_dir,'best_model.pth')
     log_dir = os.path.join(experiment_dir, 'logs')
@@ -1101,8 +1144,6 @@ def main():
     for i in range(len(dataset_unnormalized)):
         if i == 0:
             print(dataset_unnormalized[i].shape)
-        
-    
     
     data_loader_unnormalized = DataLoader(dataset_unnormalized, batch_size=32, shuffle=True)
     mean, std = calculate_mean_std_from_batches(data_loader_unnormalized, num_batches=len(data_loader_unnormalized), device=device)
@@ -1114,7 +1155,7 @@ def main():
     # Create the datasets: Consistig of the original dataset and the augmented datasets
     unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean, std)]), device=device)
     datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=transforms.Compose([transforms.Normalize(mean, std)]), device=device) for _ in range(hparams['augmentation_factor']-1)]
-    
+
     datasets_with_augmentation.append(unaugmented_dataset)
     dataset = ConcatDataset(datasets_with_augmentation)
     
