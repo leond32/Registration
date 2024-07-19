@@ -1123,7 +1123,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=hparams['batch_size'], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=hparams['batch_size'], shuffle=True)
     
-    plot_images(train_loader, experiment_dir, num_samples=4, slice_idx = int(hparams['image_dimension'][0]/2))
+    plot_images(train_loader, experiment_dir, num_samples=8, slice_idx = int(hparams['image_dimension'][0]/2))
     
     
     mean, std = calculate_mean_std_from_batches(train_loader, num_batches=5, device=device)
@@ -1189,7 +1189,7 @@ def main():
     logging.info('Saved the metrics')
     
     # plot results
-    plot_image_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=4)
+    plot_image_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=8)
     logging.info('Saved image of some results')
     
 if __name__ == "__main__":
