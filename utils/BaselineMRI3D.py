@@ -1096,6 +1096,14 @@ def main():
     
     # Create unnormalized dataset for mean and std calculation
     dataset_unnormalized = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=None, device=device)
+    
+    # check that every sample in dataset has 3 dimensions
+    for i in range(len(dataset_unnormalized)):
+        if i == 0:
+            print(dataset_unnormalized[i].shape)
+        
+    
+    
     data_loader_unnormalized = DataLoader(dataset_unnormalized, batch_size=32, shuffle=True)
     mean, std = calculate_mean_std_from_batches(data_loader_unnormalized, num_batches=len(data_loader_unnormalized), device=device)
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
@@ -1106,7 +1114,7 @@ def main():
     # Create the datasets: Consistig of the original dataset and the augmented datasets
     unaugmented_dataset = CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean, std)]), device=device)
     datasets_with_augmentation = [CustomDataset_T1w_T2w(image_paths_T1, image_paths_T2, hparams, dataset_augmentation=True, transform=transforms.Compose([transforms.Normalize(mean, std)]), device=device) for _ in range(hparams['augmentation_factor']-1)]
-
+    
     datasets_with_augmentation.append(unaugmented_dataset)
     dataset = ConcatDataset(datasets_with_augmentation)
     
