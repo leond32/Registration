@@ -1,4 +1,5 @@
 import sys
+import os
 from functools import partial
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from torch import nn
 
 file = Path(__file__).resolve()
 sys.path.append(str(file.parents[1]))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 #from models.diffusion_unet import LearnedSinusoidalPosEmb, SinusoidalPosEmb, default
 from diffusion_unet import LearnedSinusoidalPosEmb, SinusoidalPosEmb, default
 

@@ -2,10 +2,10 @@ import deepali.core.functional
 import torch
 from deepali.spatial import Grid, ImageTransformer, StationaryVelocityFreeFormDeformation
 from torch import nn
-from perlin import rand_perlin_3d
 import numpy as np
 import torch.nn.functional as F
-
+import sys, os; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from perlin import rand_perlin_3d
 
 def next8(number: int):
     if number % 8 == 0:

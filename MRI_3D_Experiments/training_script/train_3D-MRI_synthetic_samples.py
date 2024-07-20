@@ -2,9 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, ConcatDataset, random_split
 from torchvision import transforms
-from src.FreeFormDeformation3D import DeformationLayer
 import random
-from networks.diffusion_unet3D import Unet
 from torch import nn, optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import os
@@ -21,15 +19,41 @@ import argparse
 import os
 import re
 
+# Automatically determine the directory of the script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+#######################################################################################################################
+def add_repo_root_to_sys_path(script_dir):
+    # Move up two levels from the script directory to get to the root of the repository
+    repo_root = os.path.abspath(os.path.join(script_dir, os.pardir, os.pardir))
+    sys.path.append(repo_root)
+    return repo_root
+
+########################################################################################################################
+# Add the repository root to sys.path
+repo_root = add_repo_root_to_sys_path(script_dir)
+
+# import modules
+from src.FreeFormDeformation3D import DeformationLayer
+from networks.diffusion_unet3D import Unet
 ########################################################################################################################
 
-def get_experiment_dir(script_dir):
+
+def get_or_create_experiment_dir(script_dir):
     base_dir = os.path.abspath(os.path.join(script_dir, os.pardir, os.pardir))
-    registration_path = os.path.join(base_dir, 'REGISTRATION')
+    registration_path = os.path.join(base_dir, 'REGISTRATION') ##### TODO 
+    experiment_runs_dir = None
+
     for root, dirs, files in os.walk(registration_path):
         if 'experiment_runs' in dirs:
-            return os.path.join(root, 'experiment_runs')
-    return None
+            experiment_runs_dir = os.path.join(root, 'experiment_runs')
+            break
+
+    if experiment_runs_dir is None:
+        experiment_runs_dir = os.path.join(registration_path, 'MRI_3D_Experiments', 'experiment_runs')
+        os.makedirs(experiment_runs_dir, exist_ok=True)
+    
+    return experiment_runs_dir
 
 ########################################################################################################################
 
@@ -43,14 +67,6 @@ def get_next_experiment_number(experiment_runs_dir):
         return f'Experiment_{max(experiment_numbers) + 1:02d}'
     else:
         return 'Experiment_01'
-
-# Automatically determine the directory of the script
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Get the experiment_runs directory
-experiment_runs_dir = get_experiment_dir(script_dir)
-if experiment_runs_dir is None:
-    raise FileNotFoundError("experiment_runs directory not found")
 
 ########################################################################################################################
 
@@ -1123,20 +1139,28 @@ def main():
     data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-nopadding/T2w'
     
     # Automatically determine the directory of the script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    #script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Add the repository root to sys.path
+    #repo_root = add_repo_root_to_sys_path(script_dir)
     
-    # Define the paths to save the logs and the best model	
-    experiment_runs_dir = get_experiment_dir(script_dir) 
+    # import modules
+    #from src.FreeFormDeformation3D import DeformationLayer
+    #from networks.diffusion_unet3D import Unet
+
+    # Get the experiment_runs directory
+    experiment_runs_dir = get_or_create_experiment_dir(script_dir)
+        
+    # Get the next experiment name
     experiment_name = get_next_experiment_number(experiment_runs_dir)
     
     experiment_dir = os.path.join(experiment_runs_dir, experiment_name)
-    best_model_path = os.path.join(experiment_dir,'best_model.pth')
-    log_dir = os.path.join(experiment_dir, 'logs')
-    
-    if not os.path.exists(experiment_runs_dir):
-        os.makedirs(experiment_runs_dir)
     if not os.path.exists(experiment_dir):
         os.makedirs(experiment_dir)
+        
+    best_model_path = os.path.join(experiment_dir,'best_model.pth')
+    
+    log_dir = os.path.join(experiment_dir, 'logs')
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
@@ -1147,7 +1171,7 @@ def main():
     
     # Define the hyperparameters for dataset creation and training
     hparams = {
-        'n_epochs': 100,
+        'n_epochs': 2, #100
         'batch_size': 8,
         'lr': 0.001, #0.001
         'weight_decay': 1e-6, #1e-5
