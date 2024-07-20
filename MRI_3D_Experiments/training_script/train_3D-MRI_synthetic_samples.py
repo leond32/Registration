@@ -38,21 +38,11 @@ from src.FreeFormDeformation3D import DeformationLayer
 from networks.diffusion_unet3D import Unet
 ########################################################################################################################
 
-
 def get_or_create_experiment_dir(script_dir):
-    base_dir = os.path.abspath(os.path.join(script_dir, os.pardir, os.pardir))
-    registration_path = os.path.join(base_dir, 'REGISTRATION') ##### TODO 
-    experiment_runs_dir = None
-
-    for root, dirs, files in os.walk(registration_path):
-        if 'experiment_runs' in dirs:
-            experiment_runs_dir = os.path.join(root, 'experiment_runs')
-            break
-
-    if experiment_runs_dir is None:
-        experiment_runs_dir = os.path.join(registration_path, 'MRI_3D_Experiments', 'experiment_runs')
+    base_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+    experiment_runs_dir = os.path.join(base_dir, 'experiment_runs_training')
+    if not os.path.exists(experiment_runs_dir):
         os.makedirs(experiment_runs_dir, exist_ok=True)
-    
     return experiment_runs_dir
 
 ########################################################################################################################
@@ -916,7 +906,7 @@ def build_boxplot_before_after(data_before, data_after, title, x_label, y_label,
     import matplotlib.pyplot as plt
 
     # Create the box plot
-    box_dict = plt.boxplot([data_before, data_after], labels=['Before', 'After'])
+    box_dict = plt.boxplot([data_before, data_after], tick_labels=['Before', 'After'])
     
     # Collect all data before outliers
     all_outliers_before = []
@@ -1137,16 +1127,6 @@ def main():
     # Define the paths to the training and validation data
     data_path_T1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-nopadding/T1w' 
     data_path_T2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-nopadding/T2w'
-    
-    # Automatically determine the directory of the script
-    #script_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # Add the repository root to sys.path
-    #repo_root = add_repo_root_to_sys_path(script_dir)
-    
-    # import modules
-    #from src.FreeFormDeformation3D import DeformationLayer
-    #from networks.diffusion_unet3D import Unet
 
     # Get the experiment_runs directory
     experiment_runs_dir = get_or_create_experiment_dir(script_dir)
@@ -1171,7 +1151,7 @@ def main():
     
     # Define the hyperparameters for dataset creation and training
     hparams = {
-        'n_epochs': 2, #100
+        'n_epochs': 100, #100
         'batch_size': 8,
         'lr': 0.001, #0.001
         'weight_decay': 1e-6, #1e-5
@@ -1280,8 +1260,8 @@ def main():
         
 
     # Train the model
-    train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
-    #train_model_mixed_precision(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
+    #train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
+    train_model_mixed_precision(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
     logging.info('Finished training the model')
     
     # create the loss plot from the csv file and save it

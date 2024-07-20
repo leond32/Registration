@@ -2,6 +2,7 @@ import deepali.core.functional
 import torch
 from deepali.spatial import Grid, ImageTransformer, StationaryVelocityFreeFormDeformation
 from torch import nn
+import sys, os; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from perlin import rand_perlin_2d
 import numpy as np
 
@@ -30,7 +31,7 @@ class DeformationLayer(nn.Module):
 
     def new_deformation(self, device):
         shape = self.field.data_shape
-        print(shape)
+        #print(shape)
         s = (next8(shape[-2]), next8(shape[-1]))
 
         noise_2d = []
@@ -174,7 +175,7 @@ if __name__ == "__main__":
         np_img = torch.cat(img, dim=-1).numpy()
 
         plt.figure(figsize=(20, 6))
-        print(np_img.shape)
+        #print(np_img.shape)
         plt.imshow(np.transpose(np_img, (1, 2, 0)), interpolation="nearest", cmap="gray")
         plt.show()
 
