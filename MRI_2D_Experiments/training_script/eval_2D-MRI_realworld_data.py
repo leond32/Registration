@@ -16,6 +16,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
+import re
 
 ########################################################################################################################
 
@@ -69,9 +70,17 @@ def calculate_mean_std_from_batches(data_loader, num_batches=20, device='cpu'):
     total_images = 0
 
     # Calculate mean
-    for i, (images, _) in enumerate(data_loader):
+    for i, images in enumerate(data_loader):
+        
         if i >= num_batches:
             break
+        
+        # Remove samples with None values
+        valid_indices = [j for j in range(images.size(0)) if images[j] is not None]
+        if not valid_indices:
+            continue
+        images = images[valid_indices]
+        
         images = images.to(device).float()
         batch_samples = images.size(0)  # batch size
         total_images += batch_samples
@@ -116,6 +125,17 @@ def get_image_paths_testset(root_dir):
 
 ############################################################################################################
 
+def get_best_model_path(script_dir):
+    # Navigate to the parent directory of the script directory
+    base_dir = os.path.dirname(script_dir)
+
+    # Construct the path to the best model file
+    best_model_path = os.path.join(base_dir, 'model_for_eval', 'best_model.pth')
+
+    return best_model_path
+
+#############################################################################################################
+
 def splitall(path):
     allparts = []
     while 1:
@@ -136,7 +156,7 @@ def splitall(path):
 def find_file_correspondence(image_paths, id_name, slice_name):
     corresponding_file = None
     for path in image_paths:
-        if id_name in path and  slice_name in path:
+        if id_name in path and slice_name in path:
             corresponding_file = path
             break
     return corresponding_file
@@ -785,7 +805,7 @@ def main():
     if not os.path.exists(experiment_dir):
         os.makedirs(experiment_dir)
         
-    best_model_path = os.path.join(experiments_dir,'best_model.pth')
+    best_model_path = get_best_model_path(script_dir)
     
 
     if not os.path.exists(experiment_dir):
@@ -797,9 +817,7 @@ def main():
     # Define the hyperparameters
     hparams = {
         'batch_size': 32,
-        'lr': 0.001,
         'random_df_creation_setting': 2,
-        'T_weighting': 2,
         'image_dimension': (256,256)
     }
     
@@ -810,7 +828,7 @@ def main():
             
     # Create unnormailzed dataset and dataloaders
     dataset_unnormalized = CustomTestDataset(images_paths_01, images_paths_02, hparams=hparams, transform=None, device=device)
-    data_loader_unnormalized = DataLoader(dataset, batch_size=hparams['batch_size'], shuffle=True)
+    data_loader_unnormalized = DataLoader(dataset_unnormalized, batch_size=hparams['batch_size'], shuffle=True)
     mean, std = calculate_mean_std_from_batches(data_loader_unnormalized, num_batches=len(data_loader_unnormalized), device=device)
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
         f.write(f'Initial mean: {mean}\n')
@@ -821,10 +839,16 @@ def main():
     dataset = CustomTestDataset(images_paths_01, images_paths_02, hparams=hparams, transform=transforms.Compose([transforms.Normalize(mean=mean[0], std=std[0])]), device=device)
     #dataset = CustomDataset(images_paths, hparams=hparams, transform=None, device=device)
     val_loader = DataLoader(dataset, batch_size=hparams['batch_size'], shuffle=True)
+    mean, std = calculate_mean_std_from_batches(val_loader, num_batches=5, device=device)
+    with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
+        f.write(f'mean after normalizing: {mean}\n')
+        f.write(f'std after normalizing: {std}\n')
+    logging.info(f'Mean: {mean}, and std {std} after normalizing')
+    
 
     # Define the model
     model = Unet(
-        dim=32,
+        dim=8,
         init_dim=None,
         out_dim=2,
         dim_mults=(1, 2, 4, 8),
