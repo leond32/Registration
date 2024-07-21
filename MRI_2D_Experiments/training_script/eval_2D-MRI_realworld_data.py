@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
 import re
+import logging 
 
 ########################################################################################################################
 
@@ -90,7 +91,7 @@ def calculate_mean_std_from_batches(data_loader, num_batches=20, device='cpu'):
 
     # Calculate standard deviation
     sum_of_squared_diff = 0.0
-    for i, (images, _) in enumerate(data_loader):
+    for i, images in enumerate(data_loader):
         if i >= num_batches:
             break
         images = images.to(device).float()
@@ -225,7 +226,7 @@ class CustomTestDataset(Dataset):
 
     def __getitem__(self, idx):
         
-        # Randomly chose a Siemens or Philips for the fixed image path
+        '''# Randomly chose a Siemens or Philips for the fixed image path
         if random.choice([True, False]):
             fixed_image_path = self.image_paths_1[idx] # path of 1 phillips image
             corresponding_images = self.image_paths_2 # paths of all simens images
@@ -237,12 +238,27 @@ class CustomTestDataset(Dataset):
         # 1: get img path with corresponding id
         # 2: check for same basename 
         path_name_tuple = splitall(fixed_image_path)
-        id_name = path_name_tuple[9]
+        id_name = path_name_tuple[9] #/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/processed_png_real_world_2D/T2/ID10
+        slice_name = path_name_tuple[-1]
+        moving_image_path = find_file_correspondence(corresponding_images, id_name, slice_name)
+        if moving_image_path is None:
+            return None'''
+        # Randomly choose a Siemens or Philips for the fixed image path
+        if random.choice([True, False]):
+            fixed_image_path = self.image_paths_1[idx] # path of 1 Philips image
+            corresponding_images = self.image_paths_2 # paths of all Siemens images
+        else:
+            fixed_image_path = self.image_paths_2[idx]
+            corresponding_images = self.image_paths_1
+
+        # Find the corresponding moving image
+        path_name_tuple = splitall(fixed_image_path) 
+        id_name = path_name_tuple[-3] # Assumes ID10 is the third from the last in the path
         slice_name = path_name_tuple[-1]
         moving_image_path = find_file_correspondence(corresponding_images, id_name, slice_name)
         if moving_image_path is None:
             return None
-        
+                
         # fetch the fixed image
         fixed_img = cv2.imread(fixed_image_path)
         if fixed_img is None:
@@ -276,11 +292,11 @@ class CustomTestDataset(Dataset):
         
         # transform the images
         if self.transform:
-            fixed_image = self.transform(fixed_img)
-            moving_image = self.transform(moving_img)
+            fixed_img = self.transform(fixed_img)
+            moving_img = self.transform(moving_img)
 
         # Stack the original and deformed images along the channel dimension
-        stacked_image = torch.cat([fixed_image, moving_image], dim=0).squeeze(0)
+        stacked_image = torch.cat([fixed_img, moving_img], dim=0).squeeze(0)
 
         return stacked_image
 
@@ -412,7 +428,6 @@ def plot_results(model, best_model_path, data_loader, experiment_dir, device, nu
             ax = axes[2, i] # [2, i]
             ax.imshow(outputs[i, 0].cpu().numpy(), cmap='gray')
             ax.title.set_text('Pred. Displacement X')
-            print('Range of Pred X: ', outputs[i, 0].min(), outputs[i, 0].max())
             ax.axis('off')
         
             ax = axes[3, i]      
@@ -495,14 +510,17 @@ def build_box_plot(data, title, x_label, y_label, save_path):
       
 ############################################################################################################
 
+############################################################################################################
+
 def build_boxplot_before_after(data_before, data_after, title, x_label, y_label, save_path):
-    
+    import matplotlib.pyplot as plt
+
     # Create the box plot
-    box_dict = plt.boxplot(data_before + data_after)
+    box_dict = plt.boxplot([data_before, data_after], tick_labels=['Before', 'After'])
     
     # Collect all data before outliers
     all_outliers_before = []
-    for flier in box_dict['fliers'][:len(data_before)]:
+    for flier in box_dict['fliers'][:1]:  # Adjusted to properly collect outliers before
         all_outliers_before.extend(flier.get_ydata())
     
     n_outliers_before = len(all_outliers_before)
@@ -519,7 +537,7 @@ def build_boxplot_before_after(data_before, data_after, title, x_label, y_label,
     
     # Collect all data after outliers
     all_outliers_after = []
-    for flier in box_dict['fliers'][len(data_before):]:
+    for flier in box_dict['fliers'][1:]:  # Adjusted to properly collect outliers after
         all_outliers_after.extend(flier.get_ydata())
     
     n_outliers_after = len(all_outliers_after)
@@ -540,6 +558,7 @@ def build_boxplot_before_after(data_before, data_after, title, x_label, y_label,
     
     # Save the plot
     plt.savefig(save_path)
+    plt.close()
     
 ############################################################################################################
 
@@ -793,7 +812,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the paths to the training and validation data
-    data_path = "/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-Robert_differentscans_threshold_45/T2"
+    data_path = "/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/processed_png_real_world_2D/T2"
     
     # Get the experiment_runs directory
     experiment_runs_dir = get_or_create_experiment_dir(script_dir)
