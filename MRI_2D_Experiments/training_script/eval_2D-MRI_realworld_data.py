@@ -43,7 +43,7 @@ from networks.diffusion_unet import Unet
 
 def get_or_create_experiment_dir(script_dir):
     base_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
-    experiment_runs_dir = os.path.join(base_dir, 'experiment_runs_training')
+    experiment_runs_dir = os.path.join(base_dir, 'experiment_runs_eval')
     if not os.path.exists(experiment_runs_dir):
         os.makedirs(experiment_runs_dir, exist_ok=True)
     return experiment_runs_dir
@@ -775,10 +775,16 @@ def main():
     # Define the paths to the training and validation data
     data_path = "/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-Robert_differentscans_threshold_45/T2"
     
-    # Define the paths to save the logs and the best model	
-    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Eval/two_scanners' # Change if you dont train on AFHQ
-    experiment_name = 'Experiment_01' # Change this to a different name for each experiment 
-    experiment_dir = os.path.join(experiments_dir, experiment_name)
+    # Get the experiment_runs directory
+    experiment_runs_dir = get_or_create_experiment_dir(script_dir)
+        
+    # Get the next experiment name
+    experiment_name = get_next_experiment_number(experiment_runs_dir)
+    
+    experiment_dir = os.path.join(experiment_runs_dir, experiment_name)
+    if not os.path.exists(experiment_dir):
+        os.makedirs(experiment_dir)
+        
     best_model_path = os.path.join(experiments_dir,'best_model.pth')
     
 
