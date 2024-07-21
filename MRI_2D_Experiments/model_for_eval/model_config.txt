@@ -1,0 +1,15 @@
+model = Unet(
+        dim=8,
+        init_dim=None,
+        out_dim=2,
+        dim_mults=(1, 2, 4, 8),
+        channels=2,
+        resnet_block_groups=8,
+        learned_variance=False,
+        conditional_dimensions=0,
+        patch_size=1,
+        attention_layer=None
+    )
+
+trained on following hparams:
+{'mean': 116.37, 'std': 78.5, 'n_epochs': 50, 'batch_size': 32, 'lr': 0.0001, 'weight_decay': 1e-05, 'patience': 30, 'alpha': 0, 'random_df_creation_setting': 2, 'T_weighting': 2, 'image_dimension': (256, 256), 'augmentation_factor': 5, 'modality_mixing': False, 'lr_scheduler': True}
