@@ -1,3 +1,5 @@
-# ignore images folder
-/images/
+# Ignore all .pth files
 *.pth
+
+# But do not ignore this specific best_model.pth file
+!MRI_2D_Experiments/model_for_eval/best_model.pth
