@@ -1280,7 +1280,7 @@ def main():
     # Define the hyperparameters for dataset creation and training
 
     hparams = {
-        'n_epochs': 200,
+        'n_epochs': 100,
         'batch_size': 32,
         'lr': 0.001, 
         'weight_decay': 1e-6,
@@ -1289,7 +1289,7 @@ def main():
         'random_df_creation_setting': 2,
         'T_weighting': 2,
         'image_dimension': (256,256), #(128,128)
-        'augmentation_factor': 10,
+        'augmentation_factor': 5,
         'modality_mixing': False,
         'lr_scheduler': True,
     }

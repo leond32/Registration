@@ -1,10 +1,2 @@
-2024-07-21 09:31:12,818 - INFO - Started running the training script...
-2024-07-21 09:31:12,818 - INFO - Loaded hyperparameters: {'n_epochs': 200, 'batch_size': 32, 'lr': 0.001, 'weight_decay': 1e-06, 'patience': 30, 'alpha': 0, 'random_df_creation_setting': 2, 'T_weighting': 2, 'image_dimension': (256, 256), 'augmentation_factor': 10, 'modality_mixing': False, 'lr_scheduler': True}
-2024-07-21 09:37:00,496 - INFO - Initial Mean: [116.66983032226562, 116.49566650390625], and std [79.48772430419922, 78.82713317871094]
-2024-07-21 09:37:00,499 - INFO - Loaded dataset with 27640 training samples, 3455 validation samples, and 3455 test samples
-2024-07-21 09:37:10,453 - INFO - Mean: [0.01352158933877945, 0.014983365312218666], and std [1.0170420408248901, 1.0109758377075195] after normalizing
-2024-07-21 09:37:16,123 - INFO - Loaded model with 8425122 parameters
-2024-07-21 09:37:16,138 - INFO - Moved model to device cuda
-2024-07-21 09:37:16,138 - INFO - No existing weights loaded
-2024-07-21 09:37:16,141 - INFO - Initialized optimizer with learning rate 0.001 and weight decay 1e-06 and plateau lr_scheduler
-2024-07-21 09:37:16,141 - INFO - Started training the model for 200 epochs...
+2024-07-21 10:08:27,822 - INFO - Started running the training script...
+2024-07-21 10:08:27,823 - INFO - Loaded hyperparameters: {'n_epochs': 100, 'batch_size': 32, 'lr': 0.001, 'weight_decay': 1e-06, 'patience': 30, 'alpha': 0, 'random_df_creation_setting': 2, 'T_weighting': 2, 'image_dimension': (256, 256), 'augmentation_factor': 5, 'modality_mixing': False, 'lr_scheduler': True}
