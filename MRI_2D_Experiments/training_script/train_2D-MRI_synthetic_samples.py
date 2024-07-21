@@ -1280,15 +1280,15 @@ def main():
     # Define the hyperparameters for dataset creation and training
 
     hparams = {
-        'n_epochs': 1,
+        'n_epochs': 200,
         'batch_size': 32,
         'lr': 0.001, 
-        'weight_decay': 1e-5,
+        'weight_decay': 1e-6,
         'patience': 30, 
         'alpha': 0,
         'random_df_creation_setting': 2,
         'T_weighting': 2,
-        'image_dimension': (32,32), #(128,128)
+        'image_dimension': (256,256), #(128,128)
         'augmentation_factor': 10,
         'modality_mixing': False,
         'lr_scheduler': True,
@@ -1379,7 +1379,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=hparams['lr'], weight_decay=hparams['weight_decay'])
     
     if hparams['lr_scheduler']:
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=15, verbose=True)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=20, verbose=True)
         logging.info(f'Initialized optimizer with learning rate {hparams["lr"]} and weight decay {hparams["weight_decay"]} and plateau lr_scheduler')
     else:
         scheduler = None

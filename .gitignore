@@ -1,2 +1,3 @@
 # ignore images folder
 /images/
+*.pth
