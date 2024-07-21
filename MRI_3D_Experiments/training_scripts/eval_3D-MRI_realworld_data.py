@@ -1,77 +1,106 @@
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, ConcatDataset, random_split
 from torchvision import transforms
 import random
-from networks.diffusion_unet3D import Unet
+from torch import nn, optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import os
+from torch.cuda.amp import GradScaler, autocast
+import torchvision.transforms.functional as F
 import torch.nn.functional as t
+import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
 import logging
+import argparse
+import os
+import re
+
+# Automatically determine the directory of the script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+#######################################################################################################################
+def add_repo_root_to_sys_path(script_dir):
+    # Move up two levels from the script directory to get to the root of the repository
+    repo_root = os.path.abspath(os.path.join(script_dir, os.pardir, os.pardir))
+    sys.path.append(repo_root)
+    return repo_root
+
+########################################################################################################################
+# Add the repository root to sys.path
+repo_root = add_repo_root_to_sys_path(script_dir)
+
+# import modules
+from src.FreeFormDeformation3D import DeformationLayer
+from networks.diffusion_unet3D import Unet
 ########################################################################################################################
 
+def get_or_create_experiment_dir(script_dir):
+    base_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+    experiment_runs_dir = os.path.join(base_dir, 'experiment_runs_eval')
+    if not os.path.exists(experiment_runs_dir):
+        os.makedirs(experiment_runs_dir, exist_ok=True)
+    return experiment_runs_dir
+
+########################################################################################################################
+
+def get_next_experiment_number(experiment_runs_dir):
+    experiment_numbers = []
+    for dirname in os.listdir(experiment_runs_dir):
+        match = re.match(r'Experiment_(\d+)', dirname)
+        if match:
+            experiment_numbers.append(int(match.group(1)))
+    if experiment_numbers:
+        return f'Experiment_{max(experiment_numbers) + 1:02d}'
+    else:
+        return 'Experiment_01'
+
+########################################################################################################################
+
+def get_best_model_path(script_dir):
+    # Navigate to the parent directory of the script directory
+    base_dir = os.path.dirname(script_dir)
+
+    # Construct the path to the best model file
+    best_model_path = os.path.join(base_dir, 'model_for_eval', 'best_model.pth')
+
+    return best_model_path
+
+#######################################################################################################################
+
 def calculate_mean_std_from_batches(data_loader, num_batches=20, device='cpu'):
-    mean = 0.0
-    std = 0.0
-    total_images = 0
+    mean = torch.zeros(2, device=device)
+    std = torch.zeros(2, device=device)
     total_voxels = 0
 
     # Calculate mean
-    for i, (images, _) in enumerate(data_loader):
+    for i, images in enumerate(data_loader):
         if i >= num_batches:
             break
+        #print(type(images))
         images = images.to(device).float()
         batch_samples = images.size(0)  # batch size
-        total_images += batch_samples
         total_voxels += batch_samples * images.shape[2] * images.shape[3] * images.shape[4]
         mean += images.sum(dim=[0, 2, 3, 4])
 
     mean /= total_voxels
 
     # Calculate standard deviation
-    sum_of_squared_diff = 0.0
-    for i, (images, _) in enumerate(data_loader):
+    sum_of_squared_diff = torch.zeros(2, device=device)
+    for i, images in enumerate(data_loader):
         if i >= num_batches:
             break
         images = images.to(device).float()
-        batch_samples = images.size(0)
-        sum_of_squared_diff += ((images - mean.view(1, -1, 1, 1, 1).to(device)) ** 2).sum(dim=[0, 2, 3, 4])
+        sum_of_squared_diff += ((images - mean.view(1, -1, 1, 1, 1)) ** 2).sum(dim=[0, 2, 3, 4])
 
     std = torch.sqrt(sum_of_squared_diff / total_voxels)
 
     return mean.tolist(), std.tolist()
 
-########################################################################################################################
-
-def splitall(path):
-    allparts = []
-    while 1:
-        parts = os.path.split(path)
-        if parts[0] == path:  # sentinel for absolute paths
-            allparts.insert(0, parts[0])
-            break
-        elif parts[1] == path: # sentinel for relative paths
-            allparts.insert(0, parts[1])
-            break
-        else:
-            path = parts[0]
-            allparts.insert(0, parts[1])
-    return allparts
-
-########################################################################################################################
-
-def find_file_correspondence(image_paths, id_name):
-    corresponding_file = None
-    for path in image_paths:
-        if id_name in path:
-            corresponding_file = path
-            break
-    return corresponding_file
-
-########################################################################################################################
+#################################################################################
 
 def plot_images(data_loader, experiment_dir, num_samples=8, slice_idx=16):
     # Create a images directory if it doesn't exist
@@ -123,19 +152,21 @@ def plot_images(data_loader, experiment_dir, num_samples=8, slice_idx=16):
     plt.tight_layout()
     fig.savefig(os.path.join(experiment_dir,"images","fixed_moving_DF.png"))   # save the figure to file
     plt.close(fig)    # close the figure window
-        
 
-########################################################################################################################
+##########################################################################
 
 def resize_3d(image, target_shape):
     image = image.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
     resized_image = t.interpolate(image, size=target_shape, mode='trilinear', align_corners=False)
     return resized_image.squeeze(0).squeeze(0)  # Remove batch and channel dimensions
 
-########################################################################################################################
+##########################################################################
 
-def center_crop_3d(image, target_shape):
+# Global flag to control printing
+printed = False
 
+def center_crop_3d(image, target_shape, print_once=False):
+    global printed
     d, h, w = image.shape
     td, th, tw = target_shape
     
@@ -151,6 +182,9 @@ def center_crop_3d(image, target_shape):
         # Pad the numpy array
         image_np = np.pad(image_np, ((d_pad, d_pad), (h_pad, h_pad), (w_pad, w_pad)), mode='reflect')
         
+        if print_once and not printed:
+            print(f"Shape after padding: {image_np.shape}")
+
     # Convert back to torch tensor
     image = torch.tensor(image_np)
     
@@ -162,11 +196,17 @@ def center_crop_3d(image, target_shape):
     cropped_image = image[d1:d1+td, h1:h1+th, w1:w1+tw]
     cropped_image = resize_3d(cropped_image, target_shape)
     
+    if print_once and not printed:
+        print(f"Shape before cropping: {image.shape}")
+        print(f"Crop indices (d1, h1, w1): ({d1}, {h1}, {w1})")
+        print(f"Shape after cropping: {cropped_image.shape}")
+        printed = True
+    
     return cropped_image
 
-########################################################################################################################
+#########################################################
 
-def random_crop_3d(image1, image2, target_shape):
+def random_crop_3d(image1, image2, target_shape, print_once=False):
     device = image1.device
     image1 = image1.cpu().numpy()  # Ensure the image is on the CPU for numpy operations
     image2 = image2.cpu().numpy()
@@ -202,117 +242,97 @@ def random_crop_3d(image1, image2, target_shape):
     
     return cropped_image1.to(device), cropped_image2.to(device)  # Move back to the original device
 
-########################################################################################################################
-class CustomDataset_Eval(Dataset):
+######################################################################################################
+
+def get_image_paths_testset(root_dir):
+    path1 = []
+    path2 = []
+    for id_folder in sorted(os.listdir(root_dir)):
+        id_folder_path = os.path.join(root_dir, id_folder)
+        if os.path.isdir(id_folder_path):
+            subfolders = [f for f in sorted(os.listdir(id_folder_path)) if os.path.isdir(os.path.join(id_folder_path, f))]
+            if len(subfolders) >= 2:
+                subfolder1_path = os.path.join(id_folder_path, subfolders[0])
+                subfolder2_path = os.path.join(id_folder_path, subfolders[1])
+                for image_name in sorted(os.listdir(subfolder1_path)):
+                    image_path = os.path.join(subfolder1_path, image_name)
+                    if os.path.isfile(image_path):
+                        path1.append(image_path)
+                for image_name in sorted(os.listdir(subfolder2_path)):
+                    image_path = os.path.join(subfolder2_path, image_name)
+                    if os.path.isfile(image_path):
+                        path2.append(image_path)
+    return path1, path2
+
+######################################################################################################
+
+class CustomDataset(Dataset):
     def __init__(self, image_paths_1, image_paths_2, hparams, dataset_augmentation=False, transform=None, device="cpu"):
         """
         Args:
-            image_paths_1 (list): List of all image Paths of the firstz scanner.
-            image_paths_2 (list): List of all image Paths of T2w.
-            hparams (dict): Dictionary of hyperparameters.
-            dataset_augmentation (bool): Whether to apply dataset augmentation.
+            image_paths_1 (list): List of all image Paths of first sensor.
+            image_paths_2 (list): List of all image Paths of second sensor.
+            shape: The shape of one image in the dataset.
+            mean (float): The mean value for normalization.
+            std (float): The standard deviation for normalization.
             transform (bool): Whether to apply the transformation.
-            device (str): Device to use (CPU or GPU).
         """
         self.image_paths_1 = image_paths_1
         self.image_paths_2 = image_paths_2
         self.transform = transform
         self.device = device
         self.image_dimension = hparams['image_dimension']
+        #self.random_df_creation_setting = hparams['random_df_creation_setting']
+        self.modality_mixing = hparams['modality_mixing']
+        self.T_weighting = hparams['T_weighting']
+        self.dataset_augmentation = dataset_augmentation
         self.img_scaling_factor = hparams['img_scaling_factor']
     
     def __len__(self):
         return len(self.image_paths_1)
     
-    def __getitem__(self, idx):
-        
-        if random.choice([True, False]):
-            fixed_image_path = self.image_paths_1[idx]
-            corresponding_images = self.image_paths_2
-        else:
-            fixed_image_path = self.image_paths_2[idx]
-            corresponding_images = self.image_paths_1
+    def build_deformation_layer(self, shape, device, fixed_img_DF=False):
+        """
+        Build and return a new deformation layer for each call to __getitem__.
+        This method returns the created deformation layer.
+        """
+        deformation_layer = DeformationLayer(shape, fixed_img_DF, random_df_creation_setting=self.random_df_creation_setting)
+        deformation_layer.new_deformation(device=device)
+        return deformation_layer
 
-        fixed_image_name = os.path.basename(fixed_image_path)
-        moving_image_path = fixed_image_path
-        for path in corresponding_images:
-            if fixed_image_name == os.path.basename(path):
-                moving_image_path = path
-                break
-        
+    def __getitem__(self, idx):
+        if self.modality_mixing:
+            if random.choice([True, False]):
+                fixed_image_path = self.image_paths_1[idx]
+                moving_image_path = self.image_paths_2[idx]
+            else:
+                fixed_image_path = self.image_paths_2[idx]
+                moving_image_path = self.image_paths_1[idx]
+                
+        else:
+            fixed_image_path = self.image_paths_1[idx]
+            moving_image_path = self.image_paths_2[idx]
+
+
         fixed_img = torch.tensor(np.load(fixed_image_path)).float()
         moving_img = torch.tensor(np.load(moving_image_path)).float()
-        
         fixed_img = resize_3d(fixed_img, tuple(int(dim * self.img_scaling_factor) for dim in fixed_img.shape))
 
         moving_img = resize_3d(moving_img, fixed_img.shape)
         fixed_img, moving_img = random_crop_3d(fixed_img, moving_img, self.image_dimension)
+        
+        shape = fixed_img.squeeze(0).T.shape
+
+        original_image = fixed_img.unsqueeze(0).to(self.device)
+        deformed_image = moving_img.unsqueeze(0).to(self.device)
 
         if self.transform:
-            fixed_image = self.transform(fixed_image)
-            moving_image = self.transform(moving_image)
+            original_image = self.transform(original_image)
+            deformed_image = self.transform(deformed_image)
 
-        stacked_image = torch.cat([fixed_image, moving_image], dim=0)
-
+        stacked_image = torch.cat([original_image, deformed_image], dim=0)
         return stacked_image
     
-########################################################################################################################
-
-def get_lr(optimizer):
-    for param_group in optimizer.param_groups:
-        return param_group['lr'] 
-
-########################################################################################################################
-def get_image_paths(root_dir): 
-    image_paths = []
-    for subject in os.listdir(root_dir):
-        subject_dir = os.path.join(root_dir, subject)
-        if os.path.isdir(subject_dir) and os.listdir(subject_dir) != []:
-            for filename in os.listdir(subject_dir):
-                if filename.endswith(".npy"):
-                    image_paths.append(os.path.join(subject_dir, filename))   
-    return image_paths
-
-########################################################################################################################
-
-def deform_image_3d(deformed_image: torch.Tensor, displacement_field: torch.Tensor, device) -> torch.Tensor:
-    """
-    Deform a 3D grayscale image using the given displacement field.
-
-    Args:
-        deformed_image (torch.Tensor): Grayscale image of shape (D, H, W).
-        displacement_field (torch.Tensor): Displacement field of shape (3, D, H, W).
-
-    Returns:
-        torch.Tensor: Deformed image of shape (D, H, W).
-    """
-    # Ensure the input image and displacement field are on the same device
-    deformed_image = deformed_image.to(device)
-    displacement_field = displacement_field.to(device)
-    
-    # Invert the displacement field
-    displacement_field = -displacement_field
-
-    # Create grid coordinates
-    D, H, W = deformed_image.shape
-    grid_z, grid_y, grid_x = torch.meshgrid(torch.arange(D), torch.arange(H), torch.arange(W))
-    grid = torch.stack([grid_x, grid_y, grid_z], dim=0).float().to(device)  # Shape: (3, D, H, W)
-
-    # Add displacement field to grid
-    new_grid = grid
-    new_grid = new_grid.permute(1, 2, 3, 0).unsqueeze(0)  # Shape: (1, D, H, W, 3)
-
-    # Normalize grid values to be in the range [-1, 1]
-    new_grid[..., 0] = 2.0 * new_grid[..., 0] / (W - 1) - 1.0
-    new_grid[..., 1] = 2.0 * new_grid[..., 1] / (H - 1) - 1.0
-    new_grid[..., 2] = 2.0 * new_grid[..., 2] / (D - 1) - 1.0
-    new_grid = new_grid + displacement_field.permute(1, 2, 3, 0).unsqueeze(0)
-
-    # Interpolate original image using the new grid
-    deformed_image = deformed_image.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, D, H, W)
-    deformed_image = t.grid_sample(deformed_image, new_grid, mode='bilinear', padding_mode='border')
-    return deformed_image.squeeze(0).squeeze(0) 
-
 ########################################################################################################################
 
 def normalize_image(image):
@@ -330,7 +350,6 @@ def ncc(image1, image2):
     numerator = np.sum((image1 - mean1) * (image2 - mean2))
     denominator = np.sqrt(np.sum((image1 - mean1) ** 2) * np.sum((image2 - mean2) ** 2))
     return numerator / denominator
-
 
 ########################################################################################################################
 
@@ -372,6 +391,7 @@ def compute_metrics(model, best_model_path, val_loader, device):
         for i, images in enumerate(val_loader):
             
             # Move validation data to the device
+            #print("compute", type(images))
             images = images.float().to(device)
             outputs = model(images)
             batch_size = images.size(0)
@@ -514,51 +534,58 @@ def compute_metrics(model, best_model_path, val_loader, device):
         #print(f'Computed metrics on {total_images} images: SSIM={avg_ssim:.4f}, PSNR={avg_psnr:.4f}, MSE={avg_mse:.4f}, L1={avg_l1:.4f}, NCC={avg_ncc:.4f}')
         print(f'Computed metrics on {total_images} images: SSIM={avg_metrics_after['SSIM']:.4f}, PSNR={avg_metrics_after['PSNR']:.4f}, MSE={avg_metrics_after['MSE']:.4f}, L1={avg_metrics_after['L1']:.4f}, NCC={avg_metrics_after['NCC']:.4f}')
         return avg_metrics_before, avg_metrics_after, metrics_values_before, metrics_values_after
-    
-########################################################################################################################
-'''
-def build_box_plot(data, title, x_label, y_label, save_path):
-    
-    # Create the box plot
-    box_dict = plt.boxplot(data)
-    
-    # Collect all outliers
-    all_outliers = []
-    for flier in box_dict['fliers']:
-        all_outliers.extend(flier.get_ydata())
-    
-    # Calculate the number of outliers
-    n_outliers = len(all_outliers)
-    
-    # Calculate the total number of data points
-    if isinstance(data[0], list):
-        total_data_points = sum(len(d) for d in data)
-    else:
-        total_data_points = len(data)
-    
-    epsilon = 1e-8
-    # Calculate the percentage of outliers
-    percentage_outliers = (n_outliers / (total_data_points + epsilon)) * 100
-    
-    # Set plot title and labels
-    plt.title(title + f' (Outliers: {percentage_outliers:.2f}%)')
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    
-    # Save the plot
-    plt.savefig(save_path)
-    plt.close()
-    '''
-############################################################################################################
 
-def build_boxplot_before_after(data_before, data_after, title, x_label, y_label, save_path):
+##############################################################################################
+
+def deform_image_3d(deformed_image: torch.Tensor, displacement_field: torch.Tensor, device) -> torch.Tensor:
+    """
+    Deform a 3D grayscale image using the given displacement field.
+
+    Args:
+        deformed_image (torch.Tensor): Grayscale image of shape (D, H, W).
+        displacement_field (torch.Tensor): Displacement field of shape (3, D, H, W).
+
+    Returns:
+        torch.Tensor: Deformed image of shape (D, H, W).
+    """
+    # Ensure the input image and displacement field are on the same device
+    deformed_image = deformed_image.to(device)
+    displacement_field = displacement_field.to(device)
     
+    # Invert the displacement field
+    displacement_field = -displacement_field
+
+    # Create grid coordinates
+    D, H, W = deformed_image.shape
+    grid_z, grid_y, grid_x = torch.meshgrid(torch.arange(D), torch.arange(H), torch.arange(W))
+    grid = torch.stack([grid_x, grid_y, grid_z], dim=0).float().to(device)  # Shape: (3, D, H, W)
+
+    # Add displacement field to grid
+    new_grid = grid
+    new_grid = new_grid.permute(1, 2, 3, 0).unsqueeze(0)  # Shape: (1, D, H, W, 3)
+
+    # Normalize grid values to be in the range [-1, 1]
+    new_grid[..., 0] = 2.0 * new_grid[..., 0] / (W - 1) - 1.0
+    new_grid[..., 1] = 2.0 * new_grid[..., 1] / (H - 1) - 1.0
+    new_grid[..., 2] = 2.0 * new_grid[..., 2] / (D - 1) - 1.0
+    new_grid = new_grid + displacement_field.permute(1, 2, 3, 0).unsqueeze(0)
+
+    # Interpolate original image using the new grid
+    deformed_image = deformed_image.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, D, H, W)
+    deformed_image = t.grid_sample(deformed_image, new_grid, mode='bilinear', padding_mode='border')
+    return deformed_image.squeeze(0).squeeze(0) 
+
+##################################################################################################################
+    
+def build_boxplot_before_after(data_before, data_after, title, x_label, y_label, save_path):
+    import matplotlib.pyplot as plt
+
     # Create the box plot
-    box_dict = plt.boxplot(data_before + data_after)
+    box_dict = plt.boxplot([data_before, data_after], tick_labels=['Before', 'After'])
     
     # Collect all data before outliers
     all_outliers_before = []
-    for flier in box_dict['fliers'][:len(data_before)]:
+    for flier in box_dict['fliers'][:1]:  # Adjusted to properly collect outliers before
         all_outliers_before.extend(flier.get_ydata())
     
     n_outliers_before = len(all_outliers_before)
@@ -575,7 +602,7 @@ def build_boxplot_before_after(data_before, data_after, title, x_label, y_label,
     
     # Collect all data after outliers
     all_outliers_after = []
-    for flier in box_dict['fliers'][len(data_before):]:
+    for flier in box_dict['fliers'][1:]:  # Adjusted to properly collect outliers after
         all_outliers_after.extend(flier.get_ydata())
     
     n_outliers_after = len(all_outliers_after)
@@ -596,6 +623,8 @@ def build_boxplot_before_after(data_before, data_after, title, x_label, y_label,
     
     # Save the plot
     plt.savefig(save_path)
+    plt.close()
+    
 
 ########################################################################################################################
 
@@ -614,7 +643,7 @@ def plot_image_results(model, best_model_path, data_loader, experiment_dir, devi
         images = images.float().to(device)
         outputs = model(images)
         
-        fig, axes = plt.subplots(10, num_samples, figsize=(48, 27))
+        fig, axes = plt.subplots(7, num_samples, figsize=(48, 27))
         
         # overall title
         fig.suptitle(f'Image Registration Results of one Batch (Slice: {slice_idx})', fontsize=16)
@@ -667,8 +696,8 @@ def plot_image_results(model, best_model_path, data_loader, experiment_dir, devi
     plt.tight_layout()
     fig.savefig(os.path.join(experiment_dir,"images","results.png"))   # save the figure to file
     plt.close(fig)    # close the figure window        
-            
-############################################################################################################
+
+#################################################################################################################
 
 def evaluate_model(model, val_loader, best_model_path, experiment_dir, device):
     # Compute similarity measures of image and redeformed image from validation data (SSIM, PSNR, MSE, L1)
@@ -694,53 +723,55 @@ def evaluate_model(model, val_loader, best_model_path, experiment_dir, device):
         f.write(f'Average PSNR after: {avg_metrics_after['PSNR']}\n')
         f.write(f'Average MSE after: {avg_metrics_after['MSE']}\n')
         f.write(f'Average L1 after: {avg_metrics_after['L1']}\n')
-        f.write(f'Average NCC after: {avg_metrics_after['NCC']}\n')
-        
-        
+        f.write(f'Average NCC after: {avg_metrics_after['NCC']}\n') 
     
     # Boxplot of SSIM, PSNR, MSE, L1
     
     # Boxplot of SSIM
-    build_boxplot_before_after([metrics_values_before['SSIM']], [metrics_values_after['SSIM']], 'SSIM', 'SSIM', 'Values', os.path.join(experiment_dir, 'images', 'ssim_boxplot.png'))
+    build_boxplot_before_after(metrics_values_before['SSIM'], metrics_values_after['SSIM'], 'SSIM', 'SSIM', 'Values', os.path.join(experiment_dir, 'images', 'ssim_boxplot.png'))
     
     # Boxplot of PSNR
-    build_boxplot_before_after([metrics_values_before['PSNR']], [metrics_values_after['PSNR']], 'PSNR', 'PSNR', 'Values', os.path.join(experiment_dir, 'images', 'psnr_boxplot.png'))
+    build_boxplot_before_after(metrics_values_before['PSNR'], metrics_values_after['PSNR'], 'PSNR', 'PSNR', 'Values', os.path.join(experiment_dir, 'images', 'psnr_boxplot.png'))
     
     # Boxplot of MSE
-    build_boxplot_before_after([metrics_values_before['MSE']], [metrics_values_after['MSE']], 'MSE', 'MSE', 'Values', os.path.join(experiment_dir, 'images', 'mse_boxplot.png'))
+    build_boxplot_before_after(metrics_values_before['MSE'], metrics_values_after['MSE'], 'MSE', 'MSE', 'Values', os.path.join(experiment_dir, 'images', 'mse_boxplot.png'))
     
     # Boxplot of L1
-    build_boxplot_before_after([metrics_values_before['L1']], [metrics_values_after['L1']], 'L1', 'L1', 'Values', os.path.join(experiment_dir, 'images', 'l1_boxplot.png'))
+    build_boxplot_before_after(metrics_values_before['L1'], metrics_values_after['L1'], 'L1', 'L1', 'Values', os.path.join(experiment_dir, 'images', 'l1_boxplot.png'))
     
     # Boxplot of NCC
-    build_boxplot_before_after([metrics_values_before['NCC']], [metrics_values_after['NCC']], 'NCC', 'NCC', 'Values', os.path.join(experiment_dir, 'images', 'ncc_boxplot.png'))
+    build_boxplot_before_after(metrics_values_before['NCC'], metrics_values_after['NCC'], 'NCC', 'NCC', 'Values', os.path.join(experiment_dir, 'images', 'ncc_boxplot.png'))
     
     # Save metrics in a csv file
     csv_path = os.path.join(experiment_dir, 'metrics', 'metrics.csv')
     df = pd.DataFrame({'SSIM': metrics_values_after['SSIM'], 'PSNR': metrics_values_after['PSNR'], 'MSE': metrics_values_after['MSE'], 'L1': metrics_values_after['L1'], 'NCC': metrics_values_after['NCC'], 'SSIM_before': metrics_values_before['SSIM'], 'PSNR_before': metrics_values_before['PSNR'], 'MSE_before': metrics_values_before['MSE'], 'L1_before': metrics_values_before['L1'], 'NCC_before': metrics_values_before['NCC']})
     df.to_csv(csv_path, index=False)
 
-############################################################################################################
+###################################################################################################################
 
 def main():
-    
-    # Set the device
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the paths to the training and validation data
-    data_path_1 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack/T1w'  #Siemsenscanner
-    data_path_2 = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack/T2w'  #PhilipsScanner
-    # Define the paths to save the logs and the best model	
-    experiments_dir = '/vol/aimspace/projects/practical_SoSe24/registration_group/MRI_Experiments_3D_Eval/first_testing' 
-    experiment_name = 'Experiment_01' # Change this to a different name for each experiment 
-    experiment_dir = os.path.join(experiments_dir, experiment_name)
-    best_model_path = os.path.join(experiment_dir,'best_model.pth')
-    log_dir = os.path.join(experiment_dir, 'logs')
+    data_path = '/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/Real-World_3D/T2'
     
-    if not os.path.exists(experiments_dir):
-        os.makedirs(experiments_dir)
+    # Get the image paths of the Philips and Siemens scanner    
+    image_paths_1, image_paths_2 = get_image_paths_testset(data_path)
+    
+    # Get the experiment_runs directory
+    experiment_runs_dir = get_or_create_experiment_dir(script_dir)
+        
+    # Get the next experiment name
+    experiment_name = get_next_experiment_number(experiment_runs_dir)
+    
+    experiment_dir = os.path.join(experiment_runs_dir, experiment_name)
     if not os.path.exists(experiment_dir):
         os.makedirs(experiment_dir)
+        
+    best_model_path = get_best_model_path(script_dir)
+    
+    log_dir = os.path.join(experiment_dir, 'logs')
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
@@ -748,53 +779,46 @@ def main():
     logging.basicConfig(filename=os.path.join(log_dir,'log_file.log'), level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info('Started running the training script...')
-    
+
     # Define the hyperparameters for dataset creation and training
 
     hparams = {
-        'mean': 0.35,
-        'std': 0.28,
-        'batch_size': 16,
-        'patience': 20, 
-        'image_dimension': (40,128,128),
-        'lr_scheduler': True,
-        'img_scaling_factor': 1,
-    }
+            'batch_size': 8,
+            'T_weighting': 2,
+            'image_dimension': (32,64,64),
+            'modality_mixing': True,
+            'img_scaling_factor': 1/2,
+        }
     logging.info(f'Loaded hyperparameters: {hparams}')
-    
+
     # add a configuration file to save the hyperparameters in the experiment directory
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
         for key, value in hparams.items():
             f.write(f'{key}: {value}\n')
-    
 
-    # Get the image paths of the Philips and Siemens scanner    
-    image_paths_1 = get_image_paths(data_path_1)
-    image_paths_2 = get_image_paths(data_path_2)
-        
     # Create the dataset unnormlized
-    dataset_unnorm = CustomDataset_Eval(image_paths_1, image_paths_2, hparams, dataset_augmentation=False, transform=None, device=device)
+    dataset_unnorm = CustomDataset(image_paths_1, image_paths_2, hparams, dataset_augmentation=False, transform=None, device=device)
     val_loader_unnorm = DataLoader(dataset_unnorm, batch_size=hparams['batch_size'], shuffle=True)
-    
-    
-    mean, std = calculate_mean_std_from_batches(val_loader_unnorm, num_batches=len(val_loader_unnorm), device=device)
+
+    # Calculate mean and std fron unnormalized dataset
+    mean1, std1 = calculate_mean_std_from_batches(val_loader_unnorm, num_batches=len(val_loader_unnorm), device=device)
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
-        f.write(f'mean: {mean}\n')
-        f.write(f'std: {std}\n')
-    print('mean: ', mean)
-    print('std: ',std)
-    logging.info(f'Mean: {mean}, and std {std}')
+        f.write(f'Initial mean: {mean1}\n')
+        f.write(f'Initial std: {std1}\n')
+    logging.info(f'Initial mean: {mean1}, and std {std1}')
+    mean_avg = (mean1[0] + mean1[1])/2
+    std_avg = (std1[0] + std1[1])/2
     
     # Create the dataset normalized
-    dataset = CustomDataset_Eval(image_paths_1, image_paths_2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean=[hparams['mean']], std=[hparams['std']])]), device=device)
+    dataset = CustomDataset(image_paths_1, image_paths_2, hparams, dataset_augmentation=False, transform=transforms.Compose([transforms.Normalize(mean=mean_avg, std=std_avg)]), device=device)
     val_loader = DataLoader(dataset, batch_size=hparams['batch_size'], shuffle=True)
-    
+
     new_mean, new_std = calculate_mean_std_from_batches(val_loader, num_batches=len(val_loader), device=device)
     with open(os.path.join(experiment_dir, 'config.txt'), 'w') as f:
         f.write(f'new_mean: {new_mean}\n')
         f.write(f'new_std: {new_std}\n')
-    logging.info(f'New Mean: {new_mean}, and New std {new_std}')
-    
+    logging.info(f'New Mean: {new_mean}, and new std {new_std}')
+
     # Define the model
     model = Unet(
         dim=64,
@@ -818,21 +842,21 @@ def main():
 
     model.to(device)
     logging.info(f'Moved model to device {device}')
-    
+
     # Check if weights file exists
     if os.path.isfile(best_model_path): #args.resume and
         model.load_state_dict(torch.load(best_model_path, map_location=device))
         logging.info('Loaded existing weights from previous experiment')
     else:
         logging.info('No existing weights loaded')
-    
+
     # calculate metrics on the validation set and save them in a txt file
     evaluate_model(model, val_loader, best_model_path, experiment_dir, device)
     logging.info('Saved the metrics')
-    
+
     # plot results
-    plot_image_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=4)
+    plot_image_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=8)
     logging.info('Saved image of some results')
-    
+
 if __name__ == "__main__":
     main()
