@@ -1280,7 +1280,7 @@ def main():
     # Define the hyperparameters for dataset creation and training
 
     hparams = {
-        'n_epochs': 100,
+        'n_epochs': 200,
         'batch_size': 32,
         'lr': 0.001, 
         'weight_decay': 1e-6,
@@ -1386,7 +1386,7 @@ def main():
         logging.info(f'Initialized optimizer with learning rate {hparams["lr"]} and weight decay {hparams["weight_decay"]} and no lr_scheduler')
         
 
-    # Train the model
+    '''# Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
     logging.info('Finished training the model')
     
@@ -1400,7 +1400,7 @@ def main():
     
     # plot results
     plot_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=16)
-    logging.info('Saved image of some results')
+    logging.info('Saved image of some results')'''
     
     
     
