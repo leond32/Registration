@@ -1,0 +1,330 @@
+mean after normalizing: [0.10976354032754898, 0.11765457689762115]
+std after normalizing: [1.003953218460083, 0.9905343651771545]
+Model: Unet(
+  (init_conv): Conv3d(2, 64, kernel_size=(7, 7, 7), stride=(1, 1, 1), padding=(3, 3, 3))
+  (time_mlp): Sequential(
+    (0): SinusoidalPosEmb()
+    (1): Linear(in_features=64, out_features=256, bias=True)
+    (2): GELU(approximate='none')
+    (3): Linear(in_features=256, out_features=256, bias=True)
+  )
+  (downs): ModuleList(
+    (0): ModuleList(
+      (0-1): 2 x ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=128, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): Conv3d(64, 64, kernel_size=(4, 4, 4), stride=(2, 2, 2), padding=(1, 1, 1))
+    )
+    (1): ModuleList(
+      (0): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=256, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(64, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Conv3d(64, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+      )
+      (1): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=256, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): Conv3d(128, 128, kernel_size=(4, 4, 4), stride=(2, 2, 2), padding=(1, 1, 1))
+    )
+    (2): ModuleList(
+      (0): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=512, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(128, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Conv3d(128, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+      )
+      (1): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=512, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): Conv3d(256, 256, kernel_size=(4, 4, 4), stride=(2, 2, 2), padding=(1, 1, 1))
+    )
+    (3): ModuleList(
+      (0): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=1024, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(256, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Conv3d(256, 512, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+      )
+      (1): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=1024, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): Identity()
+    )
+  )
+  (ups): ModuleList(
+    (0): ModuleList(
+      (0): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=512, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(512, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Conv3d(512, 256, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+      )
+      (1): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=512, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(256, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 256, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): ConvTranspose3d(256, 256, kernel_size=(4, 4, 4), stride=(2, 2, 2), padding=(1, 1, 1))
+    )
+    (1): ModuleList(
+      (0): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=256, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(256, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Conv3d(256, 128, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+      )
+      (1): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=256, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(128, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 128, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): ConvTranspose3d(128, 128, kernel_size=(4, 4, 4), stride=(2, 2, 2), padding=(1, 1, 1))
+    )
+    (2): ModuleList(
+      (0): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=128, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(128, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Conv3d(128, 64, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+      )
+      (1): ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=128, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): ConvTranspose3d(64, 64, kernel_size=(4, 4, 4), stride=(2, 2, 2), padding=(1, 1, 1))
+    )
+    (3): ModuleList(
+      (0-1): 2 x ResnetBlock3D(
+        (mlp): Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=256, out_features=128, bias=True)
+        )
+        (block1): Block3D(
+          (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (block2): Block3D(
+          (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+          (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+          (act): SiLU()
+        )
+        (res_conv): Identity()
+      )
+      (2): Identity()
+    )
+  )
+  (mid_block1): ResnetBlock3D(
+    (mlp): Sequential(
+      (0): SiLU()
+      (1): Linear(in_features=256, out_features=1024, bias=True)
+    )
+    (block1): Block3D(
+      (proj): Conv3d(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+      (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+      (act): SiLU()
+    )
+    (block2): Block3D(
+      (proj): Conv3d(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+      (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+      (act): SiLU()
+    )
+    (res_conv): Identity()
+  )
+  (mid_block2): ResnetBlock3D(
+    (mlp): Sequential(
+      (0): SiLU()
+      (1): Linear(in_features=256, out_features=1024, bias=True)
+    )
+    (block1): Block3D(
+      (proj): Conv3d(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+      (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+      (act): SiLU()
+    )
+    (block2): Block3D(
+      (proj): Conv3d(512, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+      (norm): GroupNorm(8, 512, eps=1e-05, affine=True)
+      (act): SiLU()
+    )
+    (res_conv): Identity()
+  )
+  (final_res_block): ResnetBlock3D(
+    (mlp): Sequential(
+      (0): SiLU()
+      (1): Linear(in_features=256, out_features=128, bias=True)
+    )
+    (block1): Block3D(
+      (proj): Conv3d(128, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+      (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+      (act): SiLU()
+    )
+    (block2): Block3D(
+      (proj): Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+      (norm): GroupNorm(8, 64, eps=1e-05, affine=True)
+      (act): SiLU()
+    )
+    (res_conv): Conv3d(128, 64, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+  )
+  (final_conv): Conv3d(64, 3, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+)
+Number of parameters: 87242115

@@ -1,0 +1,12 @@
+2024-07-22 10:33:49,270 - INFO - Started running the training script...
+2024-07-22 10:33:49,270 - INFO - Loaded hyperparameters: {'n_epochs': 100, 'batch_size': 8, 'lr': 0.001, 'weight_decay': 1e-05, 'patience': 20, 'alpha': 0, 'random_df_creation_setting': 2, 'T_weighting': 2, 'image_dimension': (32, 64, 64), 'augmentation_factor': 10, 'modality_mixing': False, 'lr_scheduler': True, 'img_scaling_factor': 0.5}
+2024-07-22 10:34:10,267 - INFO - Initial Mean: [0.37030690908432007, 0.3699546754360199], and std [0.28986477851867676, 0.2828405499458313]
+2024-07-22 10:34:10,267 - INFO - Loaded augmented dataset with 1950 samples
+2024-07-22 10:34:10,268 - INFO - Loaded dataset with 1560 training samples, 195 validation samples, and 195 test samples
+2024-07-22 10:34:20,871 - INFO - Mean after normalizing: [0.102350614964962, 0.10586728900671005], and std after normalizing[0.9756481051445007, 0.967093825340271]
+2024-07-22 10:34:21,307 - INFO - Loaded model with 87242115 parameters
+2024-07-22 10:34:21,358 - INFO - Moved model to device cuda
+2024-07-22 10:34:21,517 - INFO - Loaded existing weights from previous experiment
+2024-07-22 10:34:21,525 - INFO - Initialized optimizer with learning rate 0.001 and weight decay 1e-05 and plateau lr_scheduler
+2024-07-22 10:34:50,743 - INFO - Saved the metrics
+2024-07-22 10:34:54,528 - INFO - Saved image of some results
