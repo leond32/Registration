@@ -132,10 +132,8 @@ The results, model configuration, and model weights file will be saved in `Regis
 The results, model configuration, and model weights file will be saved in `/vol/aimspace/projects/practical_SoSe24/registration_group/Registration/MRI_3D_Experiments/experiment_runs_training`.
 
 
-### **Evaluate the 3D Model**: Run the evaluation script with the 3D real-world MRI dataset. 
-- Attention: Manual action required!
-    
-    
+### **Evaluate the 3D Model**: Run the evaluation script with the 3D real-world MRI dataset. Manual action required!
+     
     python Registration/MRI_3D_Experiments/training_scripts/eval_3D_MRI_realw
 
 The results, model configuration, and model weights file will be saved in `Registration/MRI_3D_Experiments/experiment_runs_eval`. Ensure that you use the correct model weights.
