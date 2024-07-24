@@ -682,7 +682,6 @@ def ncc(image1, image2):
     denominator = np.sqrt(np.sum((image1 - mean1) ** 2) * np.sum((image2 - mean2) ** 2))
     return numerator / denominator
 
-
 ########################################################################################################################
 
 def compute_metrics(model, best_model_path, val_loader, device):
@@ -949,8 +948,6 @@ def build_boxplot_before_after(data_before, data_after, title, x_label, y_label,
     # Save the plot
     plt.savefig(save_path)
     plt.close()
-
-
 
 ############################################################################################################
 

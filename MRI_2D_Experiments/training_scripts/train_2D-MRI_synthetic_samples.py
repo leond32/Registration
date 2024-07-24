@@ -51,7 +51,7 @@ def get_or_create_experiment_dir(script_dir):
 
 ########################################################################################################################
 
-def get_next_experiment_number(experiment_runs_dir):
+def get_next_experiment_dir(experiment_runs_dir):
     experiment_numbers = []
     for dirname in os.listdir(experiment_runs_dir):
         match = re.match(r'Experiment_(\d+)', dirname)
@@ -61,6 +61,16 @@ def get_next_experiment_number(experiment_runs_dir):
         return f'Experiment_{max(experiment_numbers) + 1:02d}'
     else:
         return 'Experiment_01'
+
+########################################################################################################################
+
+def get_last_experiment_dir(experiment_runs_dir):
+    experiments = [d for d in os.listdir(experiment_runs_dir) if os.path.isdir(os.path.join(experiment_runs_dir, d))]
+    experiments.sort()
+    if experiments:
+        return experiments[-1]
+    else:
+        raise ValueError("No experiment directories found to resume from.")
 
 ########################################################################################################################
 
@@ -1259,8 +1269,12 @@ def main():
     # Get the experiment_runs directory
     experiment_runs_dir = get_or_create_experiment_dir(script_dir)
         
-    # Get the next experiment name
-    experiment_name = get_next_experiment_number(experiment_runs_dir)
+    if args.resume:
+        # Get the last experiment directory if resuming
+        experiment_name = get_last_experiment_dir(experiment_runs_dir)
+    else:
+        # Get the next experiment name if not resuming
+        experiment_name = get_next_experiment_dir(experiment_runs_dir)
     
     experiment_dir = os.path.join(experiment_runs_dir, experiment_name)
     if not os.path.exists(experiment_dir):
@@ -1386,7 +1400,7 @@ def main():
         logging.info(f'Initialized optimizer with learning rate {hparams["lr"]} and weight decay {hparams["weight_decay"]} and no lr_scheduler')
         
 
-    '''# Train the model
+    # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, hparams['n_epochs'], scheduler, device, log_dir=experiment_dir, patience = hparams['patience'], alpha=hparams['alpha'])
     logging.info('Finished training the model')
     
@@ -1400,7 +1414,7 @@ def main():
     
     # plot results
     plot_results(model, best_model_path, val_loader, experiment_dir, device, num_samples=16)
-    logging.info('Saved image of some results')'''
+    logging.info('Saved image of some results')
     
     
     
