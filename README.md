@@ -66,7 +66,7 @@ Registration/<br/>
 ├── .gitignore<br/>
 ├── README.md<br/>
 ├── environment.yml<br/>
-└── requirements.txt<br/>
+
 
 ## Getting Started
 
