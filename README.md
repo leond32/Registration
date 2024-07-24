@@ -134,7 +134,7 @@ The results, model configuration, and model weights file will be saved in `/vol/
 
 ### **Evaluate the 3D Model**: Run the evaluation script with the 3D real-world MRI dataset. Manual action required!
      
-    python Registration/MRI_3D_Experiments/training_scripts/eval_3D_MRI_realw
+    python Registration/MRI_3D_Experiments/training_scripts/eval_3D_MRI_realworld_data.py
 
 The results, model configuration, and model weights file will be saved in `Registration/MRI_3D_Experiments/experiment_runs_eval`. Ensure that you use the correct model weights.
 - By default, the model `Registration/MRI_3D_Experiments/model_for_eval/best_model.pt` is loaded. Since it is very large, you need to manually extract the model from the zip-attachement and save is under `Registration/MRI_3D_Experiments/model_for_eval/best_model.pt`.
