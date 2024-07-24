@@ -1357,7 +1357,7 @@ def main():
     
     # Define the model
     model = Unet(
-        dim=32,
+        dim=8,
         init_dim=None,
         out_dim=2,
         dim_mults=(1, 2, 4, 8),
