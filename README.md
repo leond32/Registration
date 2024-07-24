@@ -137,4 +137,4 @@ The results, model configuration, and model weights file will be saved in `/vol/
     python Registration/MRI_3D_Experiments/training_scripts/eval_3D_MRI_realworld_data.py
 
 The results, model configuration, and model weights file will be saved in `Registration/MRI_3D_Experiments/experiment_runs_eval`. Ensure that you use the correct model weights.
-- By default, the model `Registration/MRI_3D_Experiments/model_for_eval/best_model.pth` is loaded. Since it is very large, you need to manually extract the best_model.pth from the zip-attachement under "Assets" in the release v.1.0.0 and save it under `Registration/MRI_3D_Experiments/model_for_eval/best_model.pth`.
+- By default, the model `Registration/MRI_3D_Experiments/model_for_eval/best_model.pth` is loaded. Since it is very large, you need to manually extract the best_model.pth from the zip-attachement under "Assets" in the release v1.0.0 and save it under `Registration/MRI_3D_Experiments/model_for_eval/best_model.pth`.
