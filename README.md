@@ -51,9 +51,9 @@ All the datasets we used are stored on the server and have already been well-pre
 3. The 3D MRI dataset is located at: `/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/MRI-numpy-removeblack-nopadding`.
 4. The 3D real-world MRI dataset is located at: `/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/Real-World_3D`.
 
-### **Training and Evaluation**
-### **Prepare the Data**: Ensure that your 2D MRI slices and 3D MRI data are correctly formatted and placed in the appropriate directories.
-### **Train the 2D Model**: Run the training script with the 2D MRI dataset.
+#### **Training and Evaluation**
+#### **Prepare the Data**: Ensure that your 2D MRI slices and 3D MRI data are correctly formatted and placed in the appropriate directories.
+#### **Train the 2D Model**: Run the training script with the 2D MRI dataset.
     
     ```bash
     python Registration/MRI_2D_Experiments/training_scripts/train_2D-MRI_synthetic_samples.py
@@ -71,7 +71,7 @@ The results, model configuration, and model weights file will be saved in `Regis
 - config.txt: A configuration file that includes the parameters and settings of the model used for the training process.
 - losses.csv: A CSV file that logs the training and validation losses over epochs, useful for analyzing the training performance and identifying any issues such as overfitting or underfitting.
 
-### **Evaluate the 2D Model**: Run the evaluation script with the 2D real-world MRI dataset. 
+#### **Evaluate the 2D Model**: Run the evaluation script with the 2D real-world MRI dataset. 
 
     ```bash
     python Registration/MRI_2D_Experiments/training_scripts/eval_2D-MRI_realworld_data.py
@@ -79,7 +79,7 @@ The results, model configuration, and model weights file will be saved in `Regis
 The results, model configuration, and model weights file will be saved in `Registration/MRI_2D_Experiments/experiment_runs_eval`. Ensure that you use the correct model weights.
 
 
-### **Train the 3D Model**: Run the training script with the 3D MRI dataset. 
+#### **Train the 3D Model**: Run the training script with the 3D MRI dataset. 
     
     ```bash
     python Registration/MRI_3D_Experiments/training_scripts/train_3D-MRI_synthetic_samples.py
@@ -87,7 +87,7 @@ The results, model configuration, and model weights file will be saved in `Regis
 The results, model configuration, and model weights file will be saved in `/vol/aimspace/projects/practical_SoSe24/registration_group/Registration/MRI_3D_Experiments/experiment_runs_training`.
 
 
-### **Evaluate the 3D Model**: Run the evaluation script with the 3D real-world MRI dataset. 
+#### **Evaluate the 3D Model**: Run the evaluation script with the 3D real-world MRI dataset. 
     
     ```bash
     python Registration/MRI_3D_Experiments/training_scripts/eval_3D-MRI_realw
