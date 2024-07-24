@@ -29,6 +29,44 @@ The ground truth deformable fields are generated using Perlin noise. This method
 ### Experiments and Validation
 
 After training our model, we conducted extensive validation on real-world MRI slices. These images were sourced from different MRI scanners, including those from Siemens and Philips. This step was crucial to demonstrate the model's effectiveness and generalizability across different scanning devices.
+## File Structure
+
+Registration/<br/>
+├── MRI_2D_Experiments/<br/>
+│   ├── model_for_eval/<br/>
+│   │   ├── images/<br/>
+│   │   ├── logs/<br/>
+│   │   ├── metrics/<br/>
+│   │   ├── best_model.pth<br/>
+│   │   ├── config.txt<br/>
+│   │   └── model_config.txt<br/>
+│   ├── training_scripts/<br/>
+│   │   ├── eval_2D-MRI_realworld_data.py<br/>
+│   │   └── train_2D-MRI_synthetic_samples.py<br/>
+├── MRI_3D_Experiments/<br/>
+│   ├── model_for_eval/<br/>
+│   │   ├── images/<br/>
+│   │   ├── logs/<br/>
+│   │   ├── metrics/<br/>
+│   │   ├── config.txt<br/>
+│   │   └── losses.csv<br/>
+│   ├── training_scripts/<br/>
+│   │   ├── eval_3D-MRI_realworld_data.py<br/>
+│   │   └── train_3D-MRI_synthetic_samples.py<br/>
+├── networks/<br/>
+│   ├── diffusion_unet.py<br/>
+│   └── diffusion_unet3D.py<br/>
+├── others/<br/>
+│   ├── input.png<br/>
+│   └── model.png<br/>
+├── src/<br/>
+│   ├── FreeFormDeformation.py<br/>
+│   ├── FreeFormDeformation3D.py<br/>
+│   └── perlin.py<br/>
+├── .gitignore<br/>
+├── README.md<br/>
+├── environment.yml<br/>
+└── requirements.txt<br/>
 
 ## Getting Started
 
@@ -52,7 +90,13 @@ All the datasets we used are stored on the server and have already been well-pre
 4. The 3D real-world MRI dataset is located at: `/vol/aimspace/projects/practical_SoSe24/registration_group/datasets/Real-World_3D`.
 
 ## **Training and Evaluation**
-### **Prepare the Data**: Ensure that your 2D MRI slices and 3D MRI data are correctly formatted and placed in the appropriate directories.
+
+- In `Registration/MRI_2D_Experiments/model_for_eval` and `Registration/MRI_3D_Experiments/model_for_eval` respectively, there are pretrained models and results of their performance on the synthetic validation data.
+
+### **Prepare the Data**: 
+- Ensure that your 2D MRI slices and 3D MRI data are correctly formatted and placed in the appropriate directories.
+- This is already done, if you use the datasets we provided.
+
 ### **Train the 2D Model**: Run the training script with the 2D MRI dataset.
     
     ```bash
@@ -77,6 +121,7 @@ The results, model configuration, and model weights file will be saved in `Regis
     python Registration/MRI_2D_Experiments/training_scripts/eval_2D-MRI_realworld_data.py
     ```
 The results, model configuration, and model weights file will be saved in `Registration/MRI_2D_Experiments/experiment_runs_eval`. Ensure that you use the correct model weights.
+- By default, the model `Registration/MRI_2D_Experiments/model_for_eval/best_model.pt` is loaded. (You may need to unzip it)
 
 
 ### **Train the 3D Model**: Run the training script with the 3D MRI dataset. 
@@ -93,3 +138,4 @@ The results, model configuration, and model weights file will be saved in `/vol/
     python Registration/MRI_3D_Experiments/training_scripts/eval_3D-MRI_realw
     ```
 The results, model configuration, and model weights file will be saved in `Registration/MRI_3D_Experiments/experiment_runs_eval`. Ensure that you use the correct model weights.
+- By default, the model `Registration/MRI_3D_Experiments/model_for_eval/best_model.pt` is loaded. (You may need to unzip it)
