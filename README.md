@@ -60,12 +60,12 @@ All the datasets we used are stored on the server and have already been well-pre
     ```
 The results, model configuration, and model weights file will be saved in `Registration/MRI_2D_Experiments/experiment_runs_training`. This directory will contain the following items:
 
-Directories:
-- images: Contains various plots and visualizations generated during the training process.
+#### **Directories**:
+- images: Contains various plots and visualizations generated during the training process and the model evaluation.
 - logs: Stores log files that record the details of the training process, including initial hyperparameter settings, training settings and loss-logging
 - metrics: Contains files related to the evaluation metrics calculated during the validation of the model.
 
-Files:
+#### **Files**:
 - best_model.pth: This file contains the weights of the best-performing model based on the validation performance during training.
 - checkpoint.pth: A checkpoint file that saves the model weights and other training parameters at a specific point in time, allowing the training process to be resumed from this point if needed.
 - config.txt: A configuration file that includes the parameters and settings of the model used for the training process.
