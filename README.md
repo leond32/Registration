@@ -1,15 +1,15 @@
 # Remove Your One Deformation: Supervised Learning for Deformable Image Registration
 
 
-The mainly goal of our project is to use a neural network to predict deformable field given two spine MRI in a supervised learning method.  The ground truth is the deformation field. 
+The main goal of our project is to use a neural network to predict the deformation field between two given spine MRI images in a supervised learning method.  The ground truth is the deformation field. 
 
 ![](./others/input.png)
 
-This project aims to predict deformable fields given two spine MRI images using a neural network in a supervised learning setting. The primary focus is to enhance the accuracy and applicability of deformable field predictions in medical imaging, particularly for spine MRI scans.
+This project aims to predict deformation fields given two spine MRI images using a neural network in a supervised learning setting. The primary focus is to enhance the accuracy and applicability of deformation field predictions in medical imaging, particularly for spine MRI scans.
 
 ## Project Overview
 
-We employ both 2D MRI slices in PNG format and 3D MRI data in NPY format. The ground truth for our model training is derived from deformable fields created using Perlin noise. Our neural network model is based on the U-Net architecture, known for its effectiveness in medical image segmentation tasks.
+We employ 2D MRI slices in PNG format and 3D MRI data in NPY format. The ground truth for our model training is derived from deformation fields created using Perlin noise. Our neural network model is based on the U-Net architecture, which is known for its effectiveness in medical image segmentation tasks.
 
 ### Data
 
@@ -18,13 +18,13 @@ We employ both 2D MRI slices in PNG format and 3D MRI data in NPY format. The gr
 
 ### Model Architecture
 
-We utilize a U-Net-based neural network for predicting the deformable fields. U-Net is particularly well-suited for this task due to its encoder-decoder structure, which allows for precise localization and segmentation tasks.
+We utilize a U-Net-based neural network to predict deformation fields. U-Nets are particularly well-suited for this task due to their encoder-decoder structure, which allows for precise localization and segmentation tasks.
 
 ![](./others/model.png)
 
 ### Ground Truth
 
-The ground truth deformable fields are generated using Perlin noise. This method introduces realistic variations and deformations that help in training a robust model capable of handling real-world data.
+The ground truth deformation fields are generated using Perlin noise. This method introduces realistic variations and deformations that help in training a robust model capable of handling real-world data.
 
 ### Experiments and Validation
 
@@ -66,7 +66,7 @@ Registration/<br/>
 ├── .gitignore<br/>
 ├── README.md<br/>
 ├── environment.yml<br/>
-└── requirements.txt<br/>
+
 
 ## Getting Started
 
@@ -91,7 +91,7 @@ All the datasets we used are stored on the server and have already been well-pre
 
 ## **Training and Evaluation**
 
-- In `Registration/MRI_2D_Experiments/model_for_eval` and `Registration/MRI_3D_Experiments/model_for_eval` respectively, there are pretrained models and results of their performance on the synthetic validation data.
+- In `Registration/MRI_2D_Experiments/model_for_eval` and `Registration/MRI_3D_Experiments/model_for_eval` respectively, there are pre-trained models and results of their performance on the synthetic validation data.
 
 ### **Prepare the Data**: 
 - Ensure that your 2D MRI slices and 3D MRI data are correctly formatted and placed in the appropriate directories.
@@ -101,12 +101,16 @@ All the datasets we used are stored on the server and have already been well-pre
     
     
     python Registration/MRI_2D_Experiments/training_scripts/train_2D-MRI_synthetic_samples.py
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> beac9f9bfd7aa306c2de943a01ec26af7c36b82c
 The results, model configuration, and model weights file will be saved in `Registration/MRI_2D_Experiments/experiment_runs_training`. This directory will contain the following items (This is the same for the 3D-training respectively):
 
 -**Directories**:
 - images: Contains various plots and visualizations generated during the training process and the model evaluation.
-- logs: Stores log files that record the details of the training process, including initial hyperparameter settings, training settings and loss-logging
+- logs: Stores log files that record the details of the training process, including initial hyperparameter settings, training settings, and loss-logging
 - metrics: Contains files related to the evaluation metrics calculated during the validation of the model.
 
 -**Files**:
@@ -117,17 +121,29 @@ The results, model configuration, and model weights file will be saved in `Regis
 
 ### **Evaluate the 2D Model**: Run the evaluation script with the 2D real-world MRI dataset. 
 
+<<<<<<< HEAD
 
     python Registration/MRI_2D_Experiments/training_scripts/eval_2D-MRI_realworld_data.py
+=======
+    
+    python Registration/MRI_2D_Experiments/training_scripts/eval_2D-MRI_realworld_data.py
+    
+>>>>>>> beac9f9bfd7aa306c2de943a01ec26af7c36b82c
 The results, model configuration, and model weights file will be saved in `Registration/MRI_2D_Experiments/experiment_runs_eval`. Ensure that you use the correct model weights.
 - By default, the model `Registration/MRI_2D_Experiments/model_for_eval/best_model.pt` is loaded. (You may need to unzip it)
 
 
 ### **Train the 3D Model**: Run the training script with the 3D MRI dataset. 
     
+<<<<<<< HEAD
 
     python Registration/MRI_3D_Experiments/training_scripts/train_3D-MRI_synthetic_samples.py
     
+=======
+    
+    python Registration/MRI_3D_Experiments/training_scripts/train_3D-MRI_synthetic_samples.py
+
+>>>>>>> beac9f9bfd7aa306c2de943a01ec26af7c36b82c
 The results, model configuration, and model weights file will be saved in `/vol/aimspace/projects/practical_SoSe24/registration_group/Registration/MRI_3D_Experiments/experiment_runs_training`.
 
 
